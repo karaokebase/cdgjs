@@ -3,21 +3,28 @@ import { readFileSync } from "fs";
 
 const banner = readFileSync("./src/banner.txt", "utf8");
 
-export default defineConfig({
-  test: {
-    environment: "node",
-  },
-  build: {
-    lib: {
-      entry: "./src/cdg.js",
-      fileName: "cdg",
-      formats: ["es"],
+export default defineConfig(({ mode }) => {
+  const config = {
+    test: {
+      environment: "node",
     },
-    sourcemap: true,
-    rolldownOptions: {
-      output: {
-        banner: banner,
+    build: {
+      lib: {
+        entry: "./src/cdg.js",
+        fileName: "cdg",
+        formats: ["es"],
+      },
+      sourcemap: true,
+      rolldownOptions: {
+        output: {
+          banner: banner,
+        },
       },
     },
-  },
+  };
+  if (mode === "development") {
+    config.root = "example";
+    config.server = { fs: { allow: [".."] } };
+  }
+  return config;
 });
