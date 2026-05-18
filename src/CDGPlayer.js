@@ -9,14 +9,6 @@ import { CDGDecoder } from "./CDGDecoder.js";
  * @property {string} [cdgFileExtension='cdg'] - CDG file extension
  */
 
-/**
- * @typedef {Object} InitOptions
- * @property {boolean} [autoplay=true] - Start playing automatically when a track is loaded
- * @property {boolean} [showControls=true] - Show native audio controls
- * @property {boolean} [allowFullscreen=true] - Allow player to be toggled into fullscreen on double-click
- * @property {boolean} [allowClickToPlay=true] - Allow play/pause toggle on click
- */
-
 class CDGPlayer {
   static #UPDATE_INTERVAL_MS = 20; // Canvas refresh rate.
 
@@ -53,7 +45,8 @@ class CDGPlayer {
     if (this.#audioSourceElement == null) {
       this.#audioSourceElement = document.createElement("source");
     }
-    this.#audioSourceElement.type = CDGPlayer.#audioTypes[trackInfo.audioFormat];
+    this.#audioSourceElement.type =
+      CDGPlayer.#audioTypes[trackInfo.audioFormat];
     this.#audioSourceElement.src =
       trackInfo.mediaPath +
       trackInfo.audioFilePrefix +
