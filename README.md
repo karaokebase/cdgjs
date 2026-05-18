@@ -12,6 +12,8 @@ It is now packaged as an ES module (previously an AMD module) to take advantage 
 See the files in the [example](./example) directory for a working demo implementation. You will need to provide your
 own CDG file and accompanying audio file for the demo to work (the example uses 2 files named `demo.cdg` and `demo.mp3`).
 
+Start the dev server by running `npm run example` in the project root directory, and then open `http://localhost:5173/` in your browser.
+
 ### Code examples
 
 Simply provide an empty container element in your HTML source with an ID:
