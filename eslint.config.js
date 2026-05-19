@@ -1,4 +1,5 @@
 import js from "@eslint/js";
+import globals from "globals";
 import { defineConfig } from "eslint/config";
 
 export default defineConfig([
@@ -9,14 +10,10 @@ export default defineConfig([
     },
     extends: ["js/recommended"],
     languageOptions: {
-      ecmaVersion: 2022,
+      ecmaVersion: "latest",
       sourceType: "module",
       globals: {
-        console: "readonly",
-        document: "readonly",
-        fetch: "readonly",
-        setInterval: "readonly",
-        clearInterval: "readonly",
+        ...globals.browser,
       },
     },
     rules: {},
