@@ -59,7 +59,7 @@ var e = class e {
 		let t = e.#e;
 		if ((this.#u || this.#d) && (this.#t.style.backgroundColor = this.#h(this.#c), this.#u = !1), this.#d) this.#y(), this.#d = !1, this.#o.fill(0), this.#n.putImageData(this.#r, 0, 0);
 		else {
-			let e = this.#n, n = this.#r, r = this.#o, i = 0;
+			let e = this.#n, n = this.#r, r = this.#o, i;
 			for (let a = 1; a <= t.VISIBLE_Y_FONTS; ++a) {
 				i = a * t.NUM_X_FONTS + 1;
 				for (let o = 1; o <= t.VISIBLE_X_FONTS; ++o) r[i] && (this.#b(o, a), e.putImageData(n, 0, 0, (o - 1) * t.FONT_WIDTH, (a - 1) * t.FONT_HEIGHT, t.FONT_WIDTH, t.FONT_HEIGHT), r[i] = 0), ++i;
@@ -153,7 +153,7 @@ var e = class e {
 		if (3 >> a) {
 			let e = t.charCodeAt(7) & 63, a = t.charCodeAt(6) & 31;
 			if (e < n.NUM_X_FONTS && a < n.NUM_Y_FONTS) {
-				let s = a * n.NUM_X_FONTS * n.FONT_HEIGHT + e, c = [t.charCodeAt(4) & 15, t.charCodeAt(5) & 15], l = 0, u = 0;
+				let s = a * n.NUM_X_FONTS * n.FONT_HEIGHT + e, c = [t.charCodeAt(4) & 15, t.charCodeAt(5) & 15], l, u;
 				for (let e = 0; e < n.FONT_HEIGHT; e++) {
 					let i = e * n.NUM_X_FONTS + s;
 					l = t.charCodeAt(e + 8), u = c[l >> 5 & 1] << 0, u |= c[l >> 4 & 1] << 4, u |= c[l >> 3 & 1] << 8, u |= c[l >> 2 & 1] << 12, u |= c[l >> 1 & 1] << 16, u |= c[l >> 0 & 1] << 20, o ? r[i] ^= u : r[i] = u;
@@ -167,7 +167,7 @@ var e = class e {
 		(t = (e.charCodeAt(5) & 48) >> 4) && this.#E(t, n, r), (t = (e.charCodeAt(6) & 48) >> 4) && this.#D(t, n, r), this.#d = !0;
 	}
 	#E(t, n, r) {
-		let i = e.#e, a, o, s, c = 0, l = this.#g(r), u = this.#a, d = i.NUM_X_FONTS * i.VRAM_HEIGHT;
+		let i = e.#e, a, o, s, c, l = this.#g(r), u = this.#a, d = i.NUM_X_FONTS * i.VRAM_HEIGHT;
 		if (t == 2) for (o = 0; o < d; o += i.NUM_X_FONTS) {
 			for (s = o, c = u[s], a = s + 1; a < s + i.NUM_X_FONTS; a++) u[a - 1] = u[a];
 			u[s + i.NUM_X_FONTS - 1] = n ? c : l;
@@ -209,7 +209,7 @@ var e = class e {
 		this.#h(e, t);
 	}
 	async loadTrack(e) {
-		let n = this.#f(e), r = null;
+		let n = this.#f(e), r;
 		this.#d(), this.#i ??= document.createElement("source"), this.#i.type = t.#n[n.audioFormat], this.#i.src = n.mediaPath + n.audioFilePrefix + "." + n.audioFormat, this.#r.appendChild(this.#i), this.#r.load();
 		try {
 			let e = n.mediaPath + n.cdgFilePrefix + "." + n.cdgFileExtension, t = await fetch(e);
