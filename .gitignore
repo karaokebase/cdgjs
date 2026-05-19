@@ -3,11 +3,8 @@
 .settings
 .buildpath
 .DS_Store
-nbproject
-bower_components/
 coverage/
 node_modules/
 **/*.cdg
 **/*.mp3
-REFACTOR.md
 CLAUDE.md
