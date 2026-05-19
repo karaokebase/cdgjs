@@ -40,7 +40,7 @@ class CDGPlayer {
    */
   async loadTrack(trackOptions) {
     const trackInfo = this.#parseTrackOptions(trackOptions);
-    let cdgData = null;
+    let cdgData;
     this.#clearCDGInterval();
     if (this.#audioSourceElement == null) {
       this.#audioSourceElement = document.createElement("source");

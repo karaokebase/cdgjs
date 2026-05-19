@@ -115,7 +115,7 @@ class CDGDecoder {
       const localContext = this.#rgbaContext;
       const localRgbaImageData = this.#rgbaImageData;
       const localDirty = this.#dirtyBlocks;
-      let blk = 0x00;
+      let blk;
       for (let yBlk = 1; yBlk <= e.VISIBLE_Y_FONTS; ++yBlk) {
         blk = yBlk * e.NUM_X_FONTS + 1;
         for (let xBlk = 1; xBlk <= e.VISIBLE_X_FONTS; ++xBlk) {
@@ -330,8 +330,8 @@ class CDGDecoder {
           cdgPack.charCodeAt(4) & 0x0f,
           cdgPack.charCodeAt(5) & 0x0f,
         ];
-        let currentRow = 0x00;
-        let tempPxl = 0x00;
+        let currentRow;
+        let tempPxl;
         for (let yInc = 0; yInc < e.FONT_HEIGHT; yInc++) {
           const pixPos = yInc * e.NUM_X_FONTS + startPixel;
           currentRow = cdgPack.charCodeAt(yInc + 8);
@@ -367,7 +367,7 @@ class CDGDecoder {
 
   #procVramHscroll(direction, copyFlag, color) {
     const e = CDGDecoder.#CDG_ENUM;
-    let xSrc, ySrc, yStart, buf = 0;
+    let xSrc, ySrc, yStart, buf;
     const lineColor = this.#fillLineWithPaletteIndex(color);
     const localVram = this.#vram;
     const vramSize = e.NUM_X_FONTS * e.VRAM_HEIGHT;
