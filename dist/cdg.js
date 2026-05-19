@@ -30,144 +30,145 @@ var e = class e {
 		SCROLL_COPY: 24,
 		SMOOTHING_PACKS: 6
 	};
-	#t;
+	static #t = [
+		0,
+		4,
+		8,
+		12,
+		16,
+		20
+	];
 	#n;
 	#r;
 	#i;
 	#a;
 	#o;
-	#s = null;
-	#c = 0;
-	#l = 0;
-	#u = !1;
-	#d = !1;
+	#s;
+	#c;
+	#l = null;
+	#u = 0;
+	#d = 0;
+	#f = !1;
+	#p = !1;
 	constructor(t, n) {
 		let r = e.#e;
-		this.#t = n, this.#n = t.getContext("2d"), this.#r = this.#n.createImageData(r.VISIBLE_WIDTH, r.VISIBLE_HEIGHT), this.#i = new Uint32Array(r.PALETTE_ENTRIES), this.#a = new Uint32Array(r.NUM_X_FONTS * r.VRAM_HEIGHT), this.#o = new Uint8Array(r.NUM_X_FONTS * r.NUM_Y_FONTS), t.width = r.VISIBLE_WIDTH, t.height = r.VISIBLE_HEIGHT, this.#f();
+		this.#n = n, this.#r = t.getContext("2d"), this.#i = this.#r.createImageData(r.VISIBLE_WIDTH, r.VISIBLE_HEIGHT), this.#a = new Uint32Array(r.PALETTE_ENTRIES), this.#o = new Uint32Array(r.NUM_X_FONTS * r.VRAM_HEIGHT), this.#s = new Uint8Array(r.NUM_X_FONTS * r.NUM_Y_FONTS), this.#c = new Uint32Array(r.NUM_X_FONTS * r.FONT_HEIGHT), t.width = r.VISIBLE_WIDTH, t.height = r.VISIBLE_HEIGHT, this.#m();
 	}
 	setCdgData(e) {
-		this.#f(), this.#p(), this.#s = e;
+		this.#m(), this.#h(), this.#l = e;
 	}
 	updateFrame(t) {
 		let n = e.#e, r = Math.floor(t * n.PACKS_PER_SECOND), i;
-		r = r < 0 ? 0 : r, r < this.#l - n.PACKS_PER_SECOND && (this.#f(), this.#l = 0), i = this.#l + n.SMOOTHING_PACKS, i = r > i ? r : i, i > this.#l && (this.#m(i), this.#p());
+		r = r < 0 ? 0 : r, r < this.#d - n.PACKS_PER_SECOND && (this.#m(), this.#d = 0), i = this.#d + n.SMOOTHING_PACKS, i = r > i ? r : i, i > this.#d && (this.#g(i), this.#h());
 	}
-	#f() {
-		this.#l = 0, this.#c = 0, this.#i.fill(0), this.#_(0), this.#o.fill(0);
+	#m() {
+		this.#d = 0, this.#u = 0, this.#a.fill(0), this.#y(0), this.#s.fill(0);
 	}
-	#p() {
+	#h() {
 		let t = e.#e;
-		if ((this.#u || this.#d) && (this.#t.style.backgroundColor = this.#h(this.#c), this.#u = !1), this.#d) this.#y(), this.#d = !1, this.#o.fill(0), this.#n.putImageData(this.#r, 0, 0);
+		if ((this.#f || this.#p) && (this.#n.style.backgroundColor = this.#_(this.#u), this.#f = !1), this.#p) this.#x(), this.#p = !1, this.#s.fill(0), this.#r.putImageData(this.#i, 0, 0);
 		else {
-			let e = this.#n, n = this.#r, r = this.#o, i;
+			let e = this.#r, n = this.#i, r = this.#s, i;
 			for (let a = 1; a <= t.VISIBLE_Y_FONTS; ++a) {
 				i = a * t.NUM_X_FONTS + 1;
-				for (let o = 1; o <= t.VISIBLE_X_FONTS; ++o) r[i] && (this.#b(o, a), e.putImageData(n, 0, 0, (o - 1) * t.FONT_WIDTH, (a - 1) * t.FONT_HEIGHT, t.FONT_WIDTH, t.FONT_HEIGHT), r[i] = 0), ++i;
+				for (let o = 1; o <= t.VISIBLE_X_FONTS; ++o) r[i] && (this.#S(o, a), e.putImageData(n, 0, 0, (o - 1) * t.FONT_WIDTH, (a - 1) * t.FONT_HEIGHT, t.FONT_WIDTH, t.FONT_HEIGHT), r[i] = 0), ++i;
 			}
 		}
 	}
-	#m(t) {
+	#g(t) {
 		let n = e.#e;
-		for (let e = this.#l; e < t; e++) {
+		for (let e = this.#d; e < t; e++) {
 			let t = e * n.PACK_SIZE;
-			if ((this.#s.charCodeAt(t) & 63) == n.TV_GRAPHICS) {
-				let e = this.#s.slice(t, t + n.PACK_SIZE);
+			if ((this.#l.charCodeAt(t) & 63) == n.TV_GRAPHICS) {
+				let e = this.#l.slice(t, t + n.PACK_SIZE);
 				switch (e.charCodeAt(1) & 63) {
 					case n.MEMORY_PRESET:
-						this.#S(e);
+						this.#w(e);
 						break;
 					case n.BORDER_PRESET:
-						this.#x(e);
+						this.#C(e);
 						break;
 					case n.LOAD_CLUT_LO:
 					case n.LOAD_CLUT_HI:
-						this.#C(e);
+						this.#T(e);
 						break;
 					case n.COPY_FONT:
 					case n.XOR_FONT:
-						this.#w(e);
+						this.#E(e);
 						break;
 					case n.SCROLL_PRESET:
 					case n.SCROLL_COPY:
-						this.#T(e);
+						this.#D(e);
 						break;
 				}
 			}
 		}
-		this.#l = t;
+		this.#d = t;
 	}
-	#h(e) {
-		let t = this.#i;
+	#_(e) {
+		let t = this.#a;
 		return "rgb(" + (t[e] >> 16 & 255) + "," + (t[e] >> 8 & 255) + "," + (t[e] >> 0 & 255) + ")";
 	}
-	#g(e) {
+	#v(e) {
 		let t = e;
 		return t |= e << 4, t |= e << 8, t |= e << 12, t |= e << 16, t |= e << 20, t;
 	}
-	#_(e) {
-		this.#a.fill(this.#g(e)), this.#d = !0;
+	#y(e) {
+		this.#o.fill(this.#v(e)), this.#p = !0;
 	}
-	#v(e, t, n, r) {
-		for (let i of [
-			0,
-			4,
-			8,
-			12,
-			16,
-			20
-		]) {
-			let a = n[r >> i & 15];
-			e[t++] = a >> 16 & 255, e[t++] = a >> 8 & 255, e[t++] = a & 255, e[t++] = 255;
+	#b(t, n, r, i) {
+		let a = e.#t;
+		for (let e = 0; e < 6; e++) {
+			let o = r[i >> a[e] & 15];
+			t[n++] = o >> 16 & 255, t[n++] = o >> 8 & 255, t[n++] = o & 255, t[n++] = 255;
 		}
-		return t;
+		return n;
 	}
-	#y() {
-		let t = e.#e, n = this.#r.data, r = this.#i, i = this.#a, a = t.NUM_X_FONTS * t.FONT_HEIGHT + 1, o = 0;
+	#x() {
+		let t = e.#e, n = this.#i.data, r = this.#a, i = this.#o, a = t.NUM_X_FONTS * t.FONT_HEIGHT + 1, o = 0;
 		for (let e = 0; e < t.VISIBLE_HEIGHT; ++e) {
-			for (let e = 0; e < t.VISIBLE_X_FONTS; ++e) o = this.#v(n, o, r, i[a++]);
+			for (let e = 0; e < t.VISIBLE_X_FONTS; ++e) o = this.#b(n, o, r, i[a++]);
 			a += t.NUM_X_FONTS - t.VISIBLE_X_FONTS;
 		}
 	}
-	#b(t, n) {
-		let r = e.#e, i = this.#r.data, a = this.#i, o = this.#a, s = n * r.NUM_X_FONTS * r.FONT_HEIGHT + t, c = r.NUM_X_FONTS, l = s + r.NUM_X_FONTS * r.FONT_HEIGHT, u = (n - 1) * r.FONT_HEIGHT * r.VISIBLE_WIDTH;
+	#S(t, n) {
+		let r = e.#e, i = this.#i.data, a = this.#a, o = this.#o, s = n * r.NUM_X_FONTS * r.FONT_HEIGHT + t, c = r.NUM_X_FONTS, l = s + r.NUM_X_FONTS * r.FONT_HEIGHT, u = (n - 1) * r.FONT_HEIGHT * r.VISIBLE_WIDTH;
 		u += (t - 1) * r.FONT_WIDTH, u *= 4;
 		let d = (r.VISIBLE_WIDTH - r.FONT_WIDTH) * 4;
-		for (; s < l;) u = this.#v(i, u, a, o[s]), s += c, u += d;
+		for (; s < l;) u = this.#b(i, u, a, o[s]), s += c, u += d;
 	}
-	#x(e) {
+	#C(e) {
 		let t = e.charCodeAt(4) & 63;
-		this.#i[t] != this.#i[this.#c] && (this.#u = !0), this.#c = t;
+		this.#a[t] != this.#a[this.#u] && (this.#f = !0), this.#u = t;
 	}
-	#S(e) {
-		this.#_(e.charCodeAt(4) & 63);
+	#w(e) {
+		this.#y(e.charCodeAt(4) & 63);
 	}
-	#C(t) {
-		let n = e.#e, r = this.#i, i = (t.charCodeAt(1) & 1) * n.CLUT_ENTRIES;
+	#T(t) {
+		let n = e.#e, r = this.#a, i = (t.charCodeAt(1) & 1) * n.CLUT_ENTRIES;
 		for (let e = 0; e < n.CLUT_ENTRIES; e++) {
 			let n = e + i, a = 0, o = (t.charCodeAt(e * 2 + 4) & 60) >> 2;
-			a |= o * 17 << 16, o = (t.charCodeAt(e * 2 + 4) & 3) << 2 | (t.charCodeAt(e * 2 + 5) & 48) >> 4, a |= o * 17 << 8, o = t.charCodeAt(e * 2 + 5) & 15, a |= o * 17 << 0, a != r[n] && (r[n] = a, this.#d = !0, n == this.#c && (this.#u = !0));
+			a |= o * 17 << 16, o = (t.charCodeAt(e * 2 + 4) & 3) << 2 | (t.charCodeAt(e * 2 + 5) & 48) >> 4, a |= o * 17 << 8, o = t.charCodeAt(e * 2 + 5) & 15, a |= o * 17 << 0, a != r[n] && (r[n] = a, this.#p = !0, n == this.#u && (this.#f = !0));
 		}
 	}
-	#w(t) {
-		let n = e.#e, r = this.#a, i = this.#o, a = (t.charCodeAt(4) & 48) >> 2 | (t.charCodeAt(5) & 48) >> 4, o = t.charCodeAt(1) & 32;
-		if (3 >> a) {
-			let e = t.charCodeAt(7) & 63, a = t.charCodeAt(6) & 31;
-			if (e < n.NUM_X_FONTS && a < n.NUM_Y_FONTS) {
-				let s = a * n.NUM_X_FONTS * n.FONT_HEIGHT + e, c = [t.charCodeAt(4) & 15, t.charCodeAt(5) & 15], l, u;
-				for (let e = 0; e < n.FONT_HEIGHT; e++) {
-					let i = e * n.NUM_X_FONTS + s;
-					l = t.charCodeAt(e + 8), u = c[l >> 5 & 1] << 0, u |= c[l >> 4 & 1] << 4, u |= c[l >> 3 & 1] << 8, u |= c[l >> 2 & 1] << 12, u |= c[l >> 1 & 1] << 16, u |= c[l >> 0 & 1] << 20, o ? r[i] ^= u : r[i] = u;
-				}
-				i[a * n.NUM_X_FONTS + e] = 1;
-			}
+	#E(t) {
+		let n = e.#e, r = this.#o, i = this.#s;
+		if (!(3 >> ((t.charCodeAt(4) & 48) >> 2 | (t.charCodeAt(5) & 48) >> 4) & 1)) return;
+		let a = t.charCodeAt(7) & 63, o = t.charCodeAt(6) & 31;
+		if (a >= n.NUM_X_FONTS || o >= n.NUM_Y_FONTS) return;
+		let s = t.charCodeAt(1) & 32, c = o * n.NUM_X_FONTS * n.FONT_HEIGHT + a, l = t.charCodeAt(4) & 15, u = t.charCodeAt(5) & 15;
+		for (let e = 0; e < n.FONT_HEIGHT; e++) {
+			let i = e * n.NUM_X_FONTS + c, a = t.charCodeAt(e + 8), o = (a & 32 ? u : l) << 0;
+			o |= (a & 16 ? u : l) << 4, o |= (a & 8 ? u : l) << 8, o |= (a & 4 ? u : l) << 12, o |= (a & 2 ? u : l) << 16, o |= (a & 1 ? u : l) << 20, s ? r[i] ^= o : r[i] = o;
 		}
+		i[o * n.NUM_X_FONTS + a] = 1;
 	}
-	#T(e) {
-		let t, n = (e.charCodeAt(1) & 8) >> 3, r = e.charCodeAt(4) & 15;
-		(t = (e.charCodeAt(5) & 48) >> 4) && this.#E(t, n, r), (t = (e.charCodeAt(6) & 48) >> 4) && this.#D(t, n, r), this.#d = !0;
+	#D(e) {
+		let t = (e.charCodeAt(1) & 8) >> 3, n = e.charCodeAt(4) & 15, r = (e.charCodeAt(5) & 48) >> 4, i = (e.charCodeAt(6) & 48) >> 4;
+		r && this.#O(r, t, n), i && this.#k(i, t, n), this.#p = !0;
 	}
-	#E(t, n, r) {
-		let i = e.#e, a, o, s, c, l = this.#g(r), u = this.#a, d = i.NUM_X_FONTS * i.VRAM_HEIGHT;
+	#O(t, n, r) {
+		let i = e.#e, a, o, s, c, l = this.#v(r), u = this.#o, d = i.NUM_X_FONTS * i.VRAM_HEIGHT;
 		if (t == 2) for (o = 0; o < d; o += i.NUM_X_FONTS) {
 			for (s = o, c = u[s], a = s + 1; a < s + i.NUM_X_FONTS; a++) u[a - 1] = u[a];
 			u[s + i.NUM_X_FONTS - 1] = n ? c : l;
@@ -177,8 +178,8 @@ var e = class e {
 			u[s] = n ? c : l;
 		}
 	}
-	#D(t, n, r) {
-		let i = e.#e, a, o, s = i.NUM_X_FONTS * i.FONT_HEIGHT, c = i.NUM_X_FONTS * i.VRAM_HEIGHT, l = i.NUM_X_FONTS * (i.VRAM_HEIGHT - i.FONT_HEIGHT), u = new Uint32Array(s), d = this.#g(r), f = this.#a;
+	#k(t, n, r) {
+		let i = e.#e, a, o, s = i.NUM_X_FONTS * i.FONT_HEIGHT, c = i.NUM_X_FONTS * i.VRAM_HEIGHT, l = i.NUM_X_FONTS * (i.VRAM_HEIGHT - i.FONT_HEIGHT), u = this.#c, d = this.#v(r), f = this.#o;
 		if (t == 2) {
 			for (a = 0, o = 0; o < s; o++) u[a++] = f[o];
 			for (a = 0, o = s; o < c; o++) f[a++] = f[o];
@@ -252,22 +253,22 @@ var e = class e {
 	}
 	#f(e) {
 		if (!e || Array.isArray(e) || typeof e != "string" && typeof e != "object") throw Error("No track information specified, nothing to load!");
-		let n, r, i = t.#t.mediaPath, a = t.#t.audioFormat, o = t.#t.cdgFileExtension;
-		if (typeof e == "object") {
-			if (e.audioFilePrefix) n = e.audioFilePrefix;
-			else throw Error("No audioFilePrefix property defined, nothing to load!");
-			if (r = e.cdgFilePrefix ? e.cdgFilePrefix : e.audioFilePrefix, e.mediaPath && (i = e.mediaPath), e.audioFormat) {
-				if (!t.#n[e.audioFormat]) throw Error("Unsupported audio format specified");
-				a = e.audioFormat;
-			}
-			e.cdgFileExtension && (o = e.cdgFileExtension);
-		} else n = r = e;
+		let n = t.#t;
+		if (typeof e == "string") return {
+			audioFilePrefix: e,
+			cdgFilePrefix: e,
+			mediaPath: n.mediaPath,
+			audioFormat: n.audioFormat,
+			cdgFileExtension: n.cdgFileExtension
+		};
+		if (!e.audioFilePrefix) throw Error("No audioFilePrefix property defined, nothing to load!");
+		if (e.audioFormat && !t.#n[e.audioFormat]) throw Error("Unsupported audio format specified");
 		return {
-			audioFilePrefix: n,
-			cdgFilePrefix: r,
-			mediaPath: i,
-			audioFormat: a,
-			cdgFileExtension: o
+			audioFilePrefix: e.audioFilePrefix,
+			cdgFilePrefix: e.cdgFilePrefix ?? e.audioFilePrefix,
+			mediaPath: e.mediaPath ?? n.mediaPath,
+			audioFormat: e.audioFormat ?? n.audioFormat,
+			cdgFileExtension: e.cdgFileExtension ?? n.cdgFileExtension
 		};
 	}
 	#p(e) {
@@ -279,9 +280,18 @@ var e = class e {
 	#h(t, n) {
 		if (!t) throw Error("Required initialisation parameter missing.");
 		let r = document.getElementById(t), i = document.createElement("div"), a = document.createElement("canvas");
-		this.#r = document.createElement("audio"), i.id = t + "-border", i.className = "cdg-border", a.id = t + "-canvas", a.className = "cdg-canvas", n && n.allowClickToPlay !== !1 && a.addEventListener("click", () => this.#m(), !0), n && n.allowFullscreen !== !1 && a.addEventListener("dblclick", (e) => this.#p(e), !0), this.#r.id = t + "-audio", this.#r.className = "cdg-audio", i.appendChild(a), r.appendChild(i), r.appendChild(this.#r), this.#r.style.width = a.offsetWidth + "px", this.#r.controls = !(n && n.showControls == 0), this.#r.autoplay = !(n && n.autoplay == 0), this.#r.addEventListener("error", () => this.#l(), !0), this.#r.addEventListener("play", () => this.#u(), !0), this.#r.addEventListener("pause", () => this.#d(), !0), this.#r.addEventListener("abort", () => this.#d(), !0), this.#r.addEventListener("ended", () => {
-			this.#d(), this.#c("ended");
-		}, !0), this.#o = new e(a, i);
+		this.#r = document.createElement("audio"), i.id = t + "-border", i.className = "cdg-border", a.id = t + "-canvas", a.className = "cdg-canvas", n && n.allowClickToPlay !== !1 && a.addEventListener("click", () => this.#m(), !0), n && n.allowFullscreen !== !1 && a.addEventListener("dblclick", (e) => this.#p(e), !0), this.#r.id = t + "-audio", this.#r.className = "cdg-audio", i.appendChild(a), r.appendChild(i), r.appendChild(this.#r), this.#r.style.width = a.offsetWidth + "px", this.#r.controls = !(n && n.showControls == 0), this.#r.autoplay = !(n && n.autoplay == 0);
+		let o = {
+			error: () => this.#l(),
+			play: () => this.#u(),
+			pause: () => this.#d(),
+			abort: () => this.#d(),
+			ended: () => {
+				this.#d(), this.#c("ended");
+			}
+		};
+		for (let [e, t] of Object.entries(o)) this.#r.addEventListener(e, t, !0);
+		this.#o = new e(a, i);
 	}
 };
 //#endregion

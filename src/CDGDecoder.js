@@ -25,12 +25,15 @@ class CDGDecoder {
     SMOOTHING_PACKS: 6, // Look-ahead buffer for smooth audio/graphics sync.
   };
 
+  static #PIXEL_SHIFTS = [0, 4, 8, 12, 16, 20]; // Bit positions of the 6 packed pixels in a VRAM word.
+
   #borderEl;
   #rgbaContext;
   #rgbaImageData;
   #palette;
   #vram;
   #dirtyBlocks;
+  #scrollBuffer;
   #cdgData = null;
   #borderIndex = 0x00;
   #currentPack = 0x00;
@@ -48,6 +51,7 @@ class CDGDecoder {
     this.#palette = new Uint32Array(e.PALETTE_ENTRIES);
     this.#vram = new Uint32Array(e.NUM_X_FONTS * e.VRAM_HEIGHT);
     this.#dirtyBlocks = new Uint8Array(e.NUM_X_FONTS * e.NUM_Y_FONTS);
+    this.#scrollBuffer = new Uint32Array(e.NUM_X_FONTS * e.FONT_HEIGHT);
     canvasEl.width = e.VISIBLE_WIDTH;
     canvasEl.height = e.VISIBLE_HEIGHT;
     this.#resetCdgState();
@@ -212,8 +216,9 @@ class CDGDecoder {
 
   // Alpha is always 0xFF; CD+G's SET_TRANSPARENT instruction is rarely used on real discs.
   #writeLineSegment(rgba, offset, pal, lineIndices) {
-    for (const shift of [0, 4, 8, 12, 16, 20]) {
-      const rgb = pal[(lineIndices >> shift) & 0x0f];
+    const shifts = CDGDecoder.#PIXEL_SHIFTS;
+    for (let i = 0; i < 6; i++) {
+      const rgb = pal[(lineIndices >> shifts[i]) & 0x0f];
       rgba[offset++] = (rgb >> 16) & 0xff;
       rgba[offset++] = (rgb >> 8) & 0xff;
       rgba[offset++] = rgb & 0xff;
@@ -316,51 +321,49 @@ class CDGDecoder {
     const subcodeChannel =
       ((cdgPack.charCodeAt(4) & 0x30) >> 2) |
       ((cdgPack.charCodeAt(5) & 0x30) >> 4);
+    if (!((activeChannels >> subcodeChannel) & 0x01)) {
+      return;
+    }
+    const xLocation = cdgPack.charCodeAt(7) & 0x3f;
+    const yLocation = cdgPack.charCodeAt(6) & 0x1f;
+    // Verify we're not going to overrun the boundaries (i.e. bad data from a scratched disc).
+    if (xLocation >= e.NUM_X_FONTS || yLocation >= e.NUM_Y_FONTS) {
+      return;
+    }
     const xorVar = cdgPack.charCodeAt(1) & 0x20;
-    if (activeChannels >> subcodeChannel && 0x01) {
-      const xLocation = cdgPack.charCodeAt(7) & 0x3f;
-      const yLocation = cdgPack.charCodeAt(6) & 0x1f;
-      // Verify we're not going to overrun the boundaries (i.e. bad data from a scratched disc).
-      if (xLocation < e.NUM_X_FONTS && yLocation < e.NUM_Y_FONTS) {
-        const startPixel =
-          yLocation * e.NUM_X_FONTS * e.FONT_HEIGHT + xLocation;
-        // NOTE: Profiling indicates charCodeAt() uses ~80% of the CPU consumed for this function.
-        // Caching these values reduces that to a negligible amount.
-        const currentIndexes = [
-          cdgPack.charCodeAt(4) & 0x0f,
-          cdgPack.charCodeAt(5) & 0x0f,
-        ];
-        let currentRow;
-        let tempPxl;
-        for (let yInc = 0; yInc < e.FONT_HEIGHT; yInc++) {
-          const pixPos = yInc * e.NUM_X_FONTS + startPixel;
-          currentRow = cdgPack.charCodeAt(yInc + 8);
-          tempPxl = currentIndexes[(currentRow >> 5) & 0x01] << 0;
-          tempPxl |= currentIndexes[(currentRow >> 4) & 0x01] << 4;
-          tempPxl |= currentIndexes[(currentRow >> 3) & 0x01] << 8;
-          tempPxl |= currentIndexes[(currentRow >> 2) & 0x01] << 12;
-          tempPxl |= currentIndexes[(currentRow >> 1) & 0x01] << 16;
-          tempPxl |= currentIndexes[(currentRow >> 0) & 0x01] << 20;
-          if (xorVar) {
-            localVram[pixPos] ^= tempPxl;
-          } else {
-            localVram[pixPos] = tempPxl;
-          }
-        }
-        localDirty[yLocation * e.NUM_X_FONTS + xLocation] = 0x01;
+    const startPixel = yLocation * e.NUM_X_FONTS * e.FONT_HEIGHT + xLocation;
+    // NOTE: Profiling indicates charCodeAt() uses ~80% of the CPU consumed for this function.
+    // Caching these values reduces that to a negligible amount.
+    const idx0 = cdgPack.charCodeAt(4) & 0x0f;
+    const idx1 = cdgPack.charCodeAt(5) & 0x0f;
+    for (let yInc = 0; yInc < e.FONT_HEIGHT; yInc++) {
+      const pixPos = yInc * e.NUM_X_FONTS + startPixel;
+      const currentRow = cdgPack.charCodeAt(yInc + 8);
+      let tempPxl = (currentRow & 0x20 ? idx1 : idx0) << 0;
+      tempPxl |= (currentRow & 0x10 ? idx1 : idx0) << 4;
+      tempPxl |= (currentRow & 0x08 ? idx1 : idx0) << 8;
+      tempPxl |= (currentRow & 0x04 ? idx1 : idx0) << 12;
+      tempPxl |= (currentRow & 0x02 ? idx1 : idx0) << 16;
+      tempPxl |= (currentRow & 0x01 ? idx1 : idx0) << 20;
+      if (xorVar) {
+        localVram[pixPos] ^= tempPxl;
+      } else {
+        localVram[pixPos] = tempPxl;
       }
     }
+    localDirty[yLocation * e.NUM_X_FONTS + xLocation] = 0x01;
   }
 
   #procDoScroll(cdgPack) {
-    let direction;
     const copyFlag = (cdgPack.charCodeAt(1) & 0x08) >> 3;
     const color = cdgPack.charCodeAt(4) & 0x0f;
-    if ((direction = (cdgPack.charCodeAt(5) & 0x30) >> 4)) {
-      this.#procVramHscroll(direction, copyFlag, color);
+    const hDirection = (cdgPack.charCodeAt(5) & 0x30) >> 4;
+    const vDirection = (cdgPack.charCodeAt(6) & 0x30) >> 4;
+    if (hDirection) {
+      this.#procVramHscroll(hDirection, copyFlag, color);
     }
-    if ((direction = (cdgPack.charCodeAt(6) & 0x30) >> 4)) {
-      this.#procVramVscroll(direction, copyFlag, color);
+    if (vDirection) {
+      this.#procVramVscroll(vDirection, copyFlag, color);
     }
     this.#screenDirty = true;
   }
@@ -398,7 +401,7 @@ class CDGDecoder {
     const offscreenSize = e.NUM_X_FONTS * e.FONT_HEIGHT;
     const vramSize = e.NUM_X_FONTS * e.VRAM_HEIGHT;
     const scrollStart = e.NUM_X_FONTS * (e.VRAM_HEIGHT - e.FONT_HEIGHT);
-    const buf = new Uint32Array(offscreenSize);
+    const buf = this.#scrollBuffer;
     const lineColor = this.#fillLineWithPaletteIndex(color);
     const localVram = this.#vram;
     if (direction == 0x02) {

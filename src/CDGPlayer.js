@@ -144,45 +144,33 @@ class CDGPlayer {
     ) {
       throw new Error("No track information specified, nothing to load!");
     }
-    let audioFilePrefix;
-    let cdgFilePrefix;
-    let mediaPath = CDGPlayer.#defaults.mediaPath;
-    let audioFormat = CDGPlayer.#defaults.audioFormat;
-    let cdgFileExtension = CDGPlayer.#defaults.cdgFileExtension;
-    if (typeof trackOptions === "object") {
-      if (!trackOptions.audioFilePrefix) {
-        throw new Error(
-          "No audioFilePrefix property defined, nothing to load!",
-        );
-      } else {
-        audioFilePrefix = trackOptions.audioFilePrefix;
-      }
-      cdgFilePrefix = trackOptions.cdgFilePrefix
-        ? trackOptions.cdgFilePrefix
-        : trackOptions.audioFilePrefix;
-      if (trackOptions.mediaPath) {
-        mediaPath = trackOptions.mediaPath;
-      }
-      if (trackOptions.audioFormat) {
-        if (!CDGPlayer.#audioTypes[trackOptions.audioFormat]) {
-          throw new Error("Unsupported audio format specified");
-        }
-        audioFormat = trackOptions.audioFormat;
-      }
-      if (trackOptions.cdgFileExtension) {
-        cdgFileExtension = trackOptions.cdgFileExtension;
-      }
-    } else {
-      // If only a string has been passed treat it as shorthand for setting the filename prefix for both
-      // audio and CDG files
-      audioFilePrefix = cdgFilePrefix = trackOptions;
+    const defaults = CDGPlayer.#defaults;
+    // String shorthand: use the same prefix for both audio and CDG files.
+    if (typeof trackOptions === "string") {
+      return {
+        audioFilePrefix: trackOptions,
+        cdgFilePrefix: trackOptions,
+        mediaPath: defaults.mediaPath,
+        audioFormat: defaults.audioFormat,
+        cdgFileExtension: defaults.cdgFileExtension,
+      };
+    }
+    if (!trackOptions.audioFilePrefix) {
+      throw new Error("No audioFilePrefix property defined, nothing to load!");
+    }
+    if (
+      trackOptions.audioFormat &&
+      !CDGPlayer.#audioTypes[trackOptions.audioFormat]
+    ) {
+      throw new Error("Unsupported audio format specified");
     }
     return {
-      audioFilePrefix,
-      cdgFilePrefix,
-      mediaPath,
-      audioFormat,
-      cdgFileExtension,
+      audioFilePrefix: trackOptions.audioFilePrefix,
+      cdgFilePrefix: trackOptions.cdgFilePrefix ?? trackOptions.audioFilePrefix,
+      mediaPath: trackOptions.mediaPath ?? defaults.mediaPath,
+      audioFormat: trackOptions.audioFormat ?? defaults.audioFormat,
+      cdgFileExtension:
+        trackOptions.cdgFileExtension ?? defaults.cdgFileExtension,
     };
   }
 
@@ -236,34 +224,19 @@ class CDGPlayer {
     this.#audioPlayer.autoplay = !(
       initOptions && initOptions.autoplay == false
     );
-    this.#audioPlayer.addEventListener(
-      "error",
-      () => this.#handleAudioError(),
-      true,
-    );
-    this.#audioPlayer.addEventListener(
-      "play",
-      () => this.#setCDGInterval(),
-      true,
-    );
-    this.#audioPlayer.addEventListener(
-      "pause",
-      () => this.#clearCDGInterval(),
-      true,
-    );
-    this.#audioPlayer.addEventListener(
-      "abort",
-      () => this.#clearCDGInterval(),
-      true,
-    );
-    this.#audioPlayer.addEventListener(
-      "ended",
-      () => {
+    const audioListeners = {
+      error: () => this.#handleAudioError(),
+      play: () => this.#setCDGInterval(),
+      pause: () => this.#clearCDGInterval(),
+      abort: () => this.#clearCDGInterval(),
+      ended: () => {
         this.#clearCDGInterval();
         this.#emit("ended");
       },
-      true,
-    );
+    };
+    for (const [event, handler] of Object.entries(audioListeners)) {
+      this.#audioPlayer.addEventListener(event, handler, true);
+    }
     this.#cdgDecoder = new CDGDecoder(canvasEl, borderEl);
   }
 }
