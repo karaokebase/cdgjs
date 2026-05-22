@@ -1,4 +1,4 @@
-[![CI Build](https://github.com/karaokebase/cdgjs/actions/workflows/npm-vite.yml/badge.svg)](https://github.com/karaokebase/cdgjs/actions/workflows/npm-vite.yml) [![CodeQL](https://github.com/karaokebase/cdgjs/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/karaokebase/cdgjs/actions/workflows/github-code-scanning/codeql)
+[![CI Build](https://github.com/karaokebase/cdgjs/actions/workflows/npm-vite.yml/badge.svg)](https://github.com/karaokebase/cdgjs/actions/workflows/npm-vite.yml) [![CodeQL](https://github.com/karaokebase/cdgjs/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/karaokebase/cdgjs/actions/workflows/github-code-scanning/codeql) [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=karaokebase_cdgjs&metric=coverage)](https://sonarcloud.io/summary/new_code?id=karaokebase_cdgjs) [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=karaokebase_cdgjs&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=karaokebase_cdgjs)
 
 # cdgjs
 
