@@ -1,7 +1,7 @@
 /*!
-*  cdg.js - a CD+G player for the web, based upon CD+Graphics Magic HTML5 CD+G Player
+*  cdgjs - a CD+G player for the web, based upon CD+Graphics Magic HTML5 CD+G Player
 *  (http://cdgmagic.sourceforge.net/html5_cdgplayer/). Visit project for full license
-*  information and documentation: https://github.com/willprescott/cdg.js
+*  information and documentation: https://github.com/karaokebase/cdgjs
 */
 //#region src/CDGDecoder.js
 var e = class e {
