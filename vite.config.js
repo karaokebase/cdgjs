@@ -7,6 +7,10 @@ export default defineConfig(({ mode }) => {
   const config = {
     test: {
       environment: "node",
+      coverage: {
+        enabled: true,
+        reporter: ["text", "lcovonly"],
+      },
     },
     build: {
       lib: {
