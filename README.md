@@ -1,6 +1,6 @@
-# cdg.js
+# cdgjs
 
-cdg.js is a JavaScript library for playing CD+G karaoke files in a web browser.
+cdgjs is a JavaScript library for playing CD+G (or MP3+G) files, typically in the form of karaoke backing tracks with lyrics overlay, in a web browser.
 
 The core of the library is derived from the awesome 
 [CD+Graphics Magic HTML5 CD+G Player](http://cdgmagic.sourceforge.net/html5_cdgplayer/), to which full credit is given.

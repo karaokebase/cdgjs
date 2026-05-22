@@ -1,9 +1,9 @@
 {
   "name": "cdg.js",
-  "homepage": "https://github.com/willprescott/cdg.js",
+  "homepage": "https://github.com/karaokebase/cdgjs",
   "repository": {
     "type": "git",
-    "url": "git://github.com/willprescott/cdg.js.git"
+    "url": "git://github.com/karaokebase/cdgjs.git"
   },
   "type": "module",
   "private": true,
