@@ -1,3 +1,5 @@
+[![CI Build](https://github.com/karaokebase/cdgjs/actions/workflows/npm-vite.yml/badge.svg)](https://github.com/karaokebase/cdgjs/actions/workflows/npm-vite.yml) [![CodeQL](https://github.com/karaokebase/cdgjs/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/karaokebase/cdgjs/actions/workflows/github-code-scanning/codeql)
+
 # cdgjs
 
 cdgjs is a JavaScript library for playing CD+G (or MP3+G) files, typically in the form of karaoke backing tracks with lyrics overlay, in a web browser.
