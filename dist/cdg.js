@@ -79,9 +79,9 @@ var e = class e {
 		let n = e.#e;
 		for (let e = this.#d; e < t; e++) {
 			let t = e * n.PACK_SIZE;
-			if ((this.#l.charCodeAt(t) & 63) == n.TV_GRAPHICS) {
+			if ((this.#l.codePointAt(t) & 63) == n.TV_GRAPHICS) {
 				let e = this.#l.slice(t, t + n.PACK_SIZE);
-				switch (e.charCodeAt(1) & 63) {
+				switch (e.codePointAt(1) & 63) {
 					case n.MEMORY_PRESET:
 						this.#w(e);
 						break;
@@ -107,7 +107,7 @@ var e = class e {
 	}
 	#_(e) {
 		let t = this.#a;
-		return "rgb(" + (t[e] >> 16 & 255) + "," + (t[e] >> 8 & 255) + "," + (t[e] >> 0 & 255) + ")";
+		return "rgb(" + (t[e] >> 16 & 255) + "," + (t[e] >> 8 & 255) + "," + (t[e] & 255) + ")";
 	}
 	#v(e) {
 		let t = e;
@@ -138,33 +138,33 @@ var e = class e {
 		for (; s < l;) u = this.#b(i, u, a, o[s]), s += c, u += d;
 	}
 	#C(e) {
-		let t = e.charCodeAt(4) & 63;
+		let t = e.codePointAt(4) & 63;
 		this.#a[t] != this.#a[this.#u] && (this.#f = !0), this.#u = t;
 	}
 	#w(e) {
-		this.#y(e.charCodeAt(4) & 63);
+		this.#y(e.codePointAt(4) & 63);
 	}
 	#T(t) {
-		let n = e.#e, r = this.#a, i = (t.charCodeAt(1) & 1) * n.CLUT_ENTRIES;
+		let n = e.#e, r = this.#a, i = (t.codePointAt(1) & 1) * n.CLUT_ENTRIES;
 		for (let e = 0; e < n.CLUT_ENTRIES; e++) {
-			let n = e + i, a = 0, o = (t.charCodeAt(e * 2 + 4) & 60) >> 2;
-			a |= o * 17 << 16, o = (t.charCodeAt(e * 2 + 4) & 3) << 2 | (t.charCodeAt(e * 2 + 5) & 48) >> 4, a |= o * 17 << 8, o = t.charCodeAt(e * 2 + 5) & 15, a |= o * 17 << 0, a != r[n] && (r[n] = a, this.#p = !0, n == this.#u && (this.#f = !0));
+			let n = e + i, a = 0, o = (t.codePointAt(e * 2 + 4) & 60) >> 2;
+			a |= o * 17 << 16, o = (t.codePointAt(e * 2 + 4) & 3) << 2 | (t.codePointAt(e * 2 + 5) & 48) >> 4, a |= o * 17 << 8, o = t.codePointAt(e * 2 + 5) & 15, a |= o * 17, a != r[n] && (r[n] = a, this.#p = !0, n == this.#u && (this.#f = !0));
 		}
 	}
 	#E(t) {
 		let n = e.#e, r = this.#o, i = this.#s;
-		if (!(3 >> ((t.charCodeAt(4) & 48) >> 2 | (t.charCodeAt(5) & 48) >> 4) & 1)) return;
-		let a = t.charCodeAt(7) & 63, o = t.charCodeAt(6) & 31;
+		if (!(3 >> ((t.codePointAt(4) & 48) >> 2 | (t.codePointAt(5) & 48) >> 4) & 1)) return;
+		let a = t.codePointAt(7) & 63, o = t.codePointAt(6) & 31;
 		if (a >= n.NUM_X_FONTS || o >= n.NUM_Y_FONTS) return;
-		let s = t.charCodeAt(1) & 32, c = o * n.NUM_X_FONTS * n.FONT_HEIGHT + a, l = t.charCodeAt(4) & 15, u = t.charCodeAt(5) & 15;
+		let s = t.codePointAt(1) & 32, c = o * n.NUM_X_FONTS * n.FONT_HEIGHT + a, l = t.codePointAt(4) & 15, u = t.codePointAt(5) & 15;
 		for (let e = 0; e < n.FONT_HEIGHT; e++) {
-			let i = e * n.NUM_X_FONTS + c, a = t.charCodeAt(e + 8), o = (a & 32 ? u : l) << 0;
+			let i = e * n.NUM_X_FONTS + c, a = t.codePointAt(e + 8), o = a & 32 ? u : l;
 			o |= (a & 16 ? u : l) << 4, o |= (a & 8 ? u : l) << 8, o |= (a & 4 ? u : l) << 12, o |= (a & 2 ? u : l) << 16, o |= (a & 1 ? u : l) << 20, s ? r[i] ^= o : r[i] = o;
 		}
 		i[o * n.NUM_X_FONTS + a] = 1;
 	}
 	#D(e) {
-		let t = (e.charCodeAt(1) & 8) >> 3, n = e.charCodeAt(4) & 15, r = (e.charCodeAt(5) & 48) >> 4, i = (e.charCodeAt(6) & 48) >> 4;
+		let t = (e.codePointAt(1) & 8) >> 3, n = e.codePointAt(4) & 15, r = (e.codePointAt(5) & 48) >> 4, i = (e.codePointAt(6) & 48) >> 4;
 		r && this.#O(r, t, n), i && this.#k(i, t, n), this.#p = !0;
 	}
 	#O(t, n, r) {
