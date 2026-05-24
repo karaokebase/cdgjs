@@ -3,8 +3,10 @@
 .settings
 .buildpath
 .DS_Store
+.claude
 coverage/
 node_modules/
 **/*.cdg
 **/*.mp3
 CLAUDE.md
+.mcp.json

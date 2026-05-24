@@ -1,5 +1,6 @@
 {
-  "name": "cdg.js",
+  "name": "cdgjs",
+  "version": "1.0.0",
   "homepage": "https://github.com/karaokebase/cdgjs",
   "repository": {
     "type": "git",
