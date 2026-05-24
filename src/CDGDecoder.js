@@ -154,13 +154,13 @@ class CDGDecoder {
       currPack++
     ) {
       const startOffset = currPack * e.PACK_SIZE;
-      const currCommand = this.#cdgData.charCodeAt(startOffset) & 0x3f;
+      const currCommand = this.#cdgData.codePointAt(startOffset) & 0x3f;
       if (currCommand == e.TV_GRAPHICS) {
         const thisPack = this.#cdgData.slice(
           startOffset,
           startOffset + e.PACK_SIZE,
         );
-        const currInstruction = thisPack.charCodeAt(1) & 0x3f;
+        const currInstruction = thisPack.codePointAt(1) & 0x3f;
         switch (currInstruction) {
           case e.MEMORY_PRESET:
             this.#procMemoryPreset(thisPack);
@@ -274,7 +274,7 @@ class CDGDecoder {
   #procBorderPreset(cdgPack) {
     // The border is a DIV element — only touch it when the RGB value actually changes,
     // as style changes can be expensive in some browsers.
-    const newBorderIndex = cdgPack.charCodeAt(4) & 0x3f;
+    const newBorderIndex = cdgPack.codePointAt(4) & 0x3f;
     if (this.#palette[newBorderIndex] != this.#palette[this.#borderIndex]) {
       this.#borderDirty = true;
     }
@@ -282,24 +282,24 @@ class CDGDecoder {
   }
 
   #procMemoryPreset(cdgPack) {
-    this.#clearVram(cdgPack.charCodeAt(4) & 0x3f);
+    this.#clearVram(cdgPack.codePointAt(4) & 0x3f);
   }
 
   #procLoadClut(cdgPack) {
     const e = CDGDecoder.#CDG_ENUM;
     const localPalette = this.#palette;
     // If instruction is 0x1E then 8*0=0, if 0x1F then 8*1=8 for offset.
-    const palOffset = (cdgPack.charCodeAt(1) & 0x01) * e.CLUT_ENTRIES;
+    const palOffset = (cdgPack.codePointAt(1) & 0x01) * e.CLUT_ENTRIES;
     for (let palInc = 0; palInc < e.CLUT_ENTRIES; palInc++) {
       const tempIdx = palInc + palOffset;
       let tempRgb = 0x00000000;
-      let tempEntry = (cdgPack.charCodeAt(palInc * 2 + 4) & 0x3c) >> 2;
+      let tempEntry = (cdgPack.codePointAt(palInc * 2 + 4) & 0x3c) >> 2;
       tempRgb |= (tempEntry * 17) << 16;
       tempEntry =
-        ((cdgPack.charCodeAt(palInc * 2 + 4) & 0x03) << 2) |
-        ((cdgPack.charCodeAt(palInc * 2 + 5) & 0x30) >> 4);
+        ((cdgPack.codePointAt(palInc * 2 + 4) & 0x03) << 2) |
+        ((cdgPack.codePointAt(palInc * 2 + 5) & 0x30) >> 4);
       tempRgb |= (tempEntry * 17) << 8;
-      tempEntry = cdgPack.charCodeAt(palInc * 2 + 5) & 0x0f;
+      tempEntry = cdgPack.codePointAt(palInc * 2 + 5) & 0x0f;
       tempRgb |= (tempEntry * 17) << 0;
       // Only update if the color has changed; a CLUT load triggers a full screen redraw.
       if (tempRgb != localPalette[tempIdx]) {
@@ -319,26 +319,26 @@ class CDGDecoder {
     // Hacky hack to play channels 0 and 1 only... Ideally, there should be a function and user option to get/set.
     const activeChannels = 0x03;
     const subcodeChannel =
-      ((cdgPack.charCodeAt(4) & 0x30) >> 2) |
-      ((cdgPack.charCodeAt(5) & 0x30) >> 4);
+      ((cdgPack.codePointAt(4) & 0x30) >> 2) |
+      ((cdgPack.codePointAt(5) & 0x30) >> 4);
     if (!((activeChannels >> subcodeChannel) & 0x01)) {
       return;
     }
-    const xLocation = cdgPack.charCodeAt(7) & 0x3f;
-    const yLocation = cdgPack.charCodeAt(6) & 0x1f;
+    const xLocation = cdgPack.codePointAt(7) & 0x3f;
+    const yLocation = cdgPack.codePointAt(6) & 0x1f;
     // Verify we're not going to overrun the boundaries (i.e. bad data from a scratched disc).
     if (xLocation >= e.NUM_X_FONTS || yLocation >= e.NUM_Y_FONTS) {
       return;
     }
-    const xorVar = cdgPack.charCodeAt(1) & 0x20;
+    const xorVar = cdgPack.codePointAt(1) & 0x20;
     const startPixel = yLocation * e.NUM_X_FONTS * e.FONT_HEIGHT + xLocation;
-    // NOTE: Profiling indicates charCodeAt() uses ~80% of the CPU consumed for this function.
+    // NOTE: Profiling indicates codePointAt() uses ~80% of the CPU consumed for this function.
     // Caching these values reduces that to a negligible amount.
-    const idx0 = cdgPack.charCodeAt(4) & 0x0f;
-    const idx1 = cdgPack.charCodeAt(5) & 0x0f;
+    const idx0 = cdgPack.codePointAt(4) & 0x0f;
+    const idx1 = cdgPack.codePointAt(5) & 0x0f;
     for (let yInc = 0; yInc < e.FONT_HEIGHT; yInc++) {
       const pixPos = yInc * e.NUM_X_FONTS + startPixel;
-      const currentRow = cdgPack.charCodeAt(yInc + 8);
+      const currentRow = cdgPack.codePointAt(yInc + 8);
       let tempPxl = (currentRow & 0x20 ? idx1 : idx0) << 0;
       tempPxl |= (currentRow & 0x10 ? idx1 : idx0) << 4;
       tempPxl |= (currentRow & 0x08 ? idx1 : idx0) << 8;
@@ -355,10 +355,10 @@ class CDGDecoder {
   }
 
   #procDoScroll(cdgPack) {
-    const copyFlag = (cdgPack.charCodeAt(1) & 0x08) >> 3;
-    const color = cdgPack.charCodeAt(4) & 0x0f;
-    const hDirection = (cdgPack.charCodeAt(5) & 0x30) >> 4;
-    const vDirection = (cdgPack.charCodeAt(6) & 0x30) >> 4;
+    const copyFlag = (cdgPack.codePointAt(1) & 0x08) >> 3;
+    const color = cdgPack.codePointAt(4) & 0x0f;
+    const hDirection = (cdgPack.codePointAt(5) & 0x30) >> 4;
+    const vDirection = (cdgPack.codePointAt(6) & 0x30) >> 4;
     if (hDirection) {
       this.#procVramHscroll(hDirection, copyFlag, color);
     }
