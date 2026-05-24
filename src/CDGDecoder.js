@@ -194,7 +194,7 @@ class CDGDecoder {
       "," +
       ((pal[requestedIndex] >> 8) & 0xff) +
       "," +
-      ((pal[requestedIndex] >> 0) & 0xff) +
+      (pal[requestedIndex] & 0xff) +
       ")"
     );
   }
@@ -300,7 +300,7 @@ class CDGDecoder {
         ((cdgPack.codePointAt(palInc * 2 + 5) & 0x30) >> 4);
       tempRgb |= (tempEntry * 17) << 8;
       tempEntry = cdgPack.codePointAt(palInc * 2 + 5) & 0x0f;
-      tempRgb |= (tempEntry * 17) << 0;
+      tempRgb |= tempEntry * 17;
       // Only update if the color has changed; a CLUT load triggers a full screen redraw.
       if (tempRgb != localPalette[tempIdx]) {
         localPalette[tempIdx] = tempRgb;
@@ -339,7 +339,7 @@ class CDGDecoder {
     for (let yInc = 0; yInc < e.FONT_HEIGHT; yInc++) {
       const pixPos = yInc * e.NUM_X_FONTS + startPixel;
       const currentRow = cdgPack.codePointAt(yInc + 8);
-      let tempPxl = (currentRow & 0x20 ? idx1 : idx0) << 0;
+      let tempPxl = currentRow & 0x20 ? idx1 : idx0;
       tempPxl |= (currentRow & 0x10 ? idx1 : idx0) << 4;
       tempPxl |= (currentRow & 0x08 ? idx1 : idx0) << 8;
       tempPxl |= (currentRow & 0x04 ? idx1 : idx0) << 12;
