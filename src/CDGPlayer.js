@@ -175,10 +175,10 @@ class CDGPlayer {
   }
 
   #toggleFullscreen(e) {
-    if (!document.fullscreenElement) {
-      e.target.requestFullscreen();
-    } else {
+    if (document.fullscreenElement) {
       document.exitFullscreen?.();
+    } else {
+      e.target.requestFullscreen();
     }
   }
 
@@ -202,10 +202,17 @@ class CDGPlayer {
     borderEl.className = "cdg-border";
     canvasEl.id = containerId + "-canvas";
     canvasEl.className = "cdg-canvas";
-    if (initOptions && initOptions.allowClickToPlay !== false) {
+    let defaultConfig = {
+      allowClickToPlay: true,
+      allowFullscreen: true,
+      autoplay: true,
+      showControls: true,
+    };
+    let config = { ...defaultConfig, ...(initOptions ?? {}) };
+    if (config.allowClickToPlay) {
       canvasEl.addEventListener("click", () => this.#togglePlay(), true);
     }
-    if (initOptions && initOptions.allowFullscreen !== false) {
+    if (config.allowFullscreen) {
       canvasEl.addEventListener(
         "dblclick",
         (e) => this.#toggleFullscreen(e),
@@ -218,12 +225,8 @@ class CDGPlayer {
     containerEl.appendChild(borderEl);
     containerEl.appendChild(this.#audioPlayer);
     this.#audioPlayer.style.width = canvasEl.offsetWidth + "px";
-    this.#audioPlayer.controls = !(
-      initOptions && initOptions.showControls == false
-    );
-    this.#audioPlayer.autoplay = !(
-      initOptions && initOptions.autoplay == false
-    );
+    this.#audioPlayer.controls = config.showControls;
+    this.#audioPlayer.autoplay = config.autoplay;
     const audioListeners = {
       error: () => this.#handleAudioError(),
       play: () => this.#setCDGInterval(),
