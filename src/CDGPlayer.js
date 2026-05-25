@@ -190,7 +190,7 @@ class CDGPlayer {
     }
   }
 
-  #init(containerId, initOptions) {
+  #init(containerId, initOptions = {}) {
     if (!containerId) {
       throw new Error("Required initialisation parameter missing.");
     }
@@ -208,7 +208,10 @@ class CDGPlayer {
       autoplay: true,
       showControls: true,
     };
-    let config = { ...defaultConfig, ...(initOptions ?? {}) };
+    let config = {
+      ...defaultConfig,
+      ...initOptions,
+    };
     if (config.allowClickToPlay) {
       canvasEl.addEventListener("click", () => this.#togglePlay(), true);
     }
