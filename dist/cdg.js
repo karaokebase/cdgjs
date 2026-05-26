@@ -277,7 +277,7 @@ var e = class e {
 	#m() {
 		this.#r.paused ? this.#r.play() : this.#r.pause();
 	}
-	#h(t, n) {
+	#h(t, n = {}) {
 		if (!t) throw Error("Required initialisation parameter missing.");
 		let r = document.getElementById(t), i = document.createElement("div"), a = document.createElement("canvas");
 		this.#r = document.createElement("audio"), i.id = t + "-border", i.className = "cdg-border", a.id = t + "-canvas", a.className = "cdg-canvas";
@@ -286,7 +286,7 @@ var e = class e {
 			allowFullscreen: !0,
 			autoplay: !0,
 			showControls: !0,
-			...n ?? {}
+			...n
 		};
 		o.allowClickToPlay && a.addEventListener("click", () => this.#m(), !0), o.allowFullscreen && a.addEventListener("dblclick", (e) => this.#p(e), !0), this.#r.id = t + "-audio", this.#r.className = "cdg-audio", i.appendChild(a), r.appendChild(i), r.appendChild(this.#r), this.#r.style.width = a.offsetWidth + "px", this.#r.controls = o.showControls, this.#r.autoplay = o.autoplay;
 		let s = {

@@ -106,6 +106,15 @@ describe("CDGPlayer", () => {
       await player.loadTrack("song");
       expect(spy).toHaveBeenCalled();
     });
+
+    it("silently ignores unhandled non-error events", () => {
+      createPlayer();
+      // Dispatch "ended" with no registered listener: #emit("ended") should reach
+      // the false branch of `else if (event === "error")` without throwing.
+      expect(() =>
+        document.getElementById("player-audio").dispatchEvent(new Event("ended")),
+      ).not.toThrow();
+    });
   });
 
   // ── loadTrack — input validation ──────────────────────────────────────────────
@@ -233,6 +242,124 @@ describe("CDGPlayer", () => {
     });
   });
 
+  // ── #handleAudioError ────────────────────────────────────────────────────────
+
+  describe("#handleAudioError", () => {
+    it("emits an error containing the error code when code is set", () => {
+      const player = createPlayer();
+      const errorHandler = vi.fn();
+      player.on("error", errorHandler);
+      Object.defineProperty(document.getElementById("player-audio"), "error", {
+        get: () => ({ code: 3 }),
+        configurable: true,
+      });
+      document.getElementById("player-audio").dispatchEvent(new Event("error"));
+      expect(errorHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining("3") }),
+      );
+    });
+
+    it("emits an error using the error object when code is absent", () => {
+      const player = createPlayer();
+      const errorHandler = vi.fn();
+      player.on("error", errorHandler);
+      const audioError = { toString: () => "decode error" };
+      Object.defineProperty(document.getElementById("player-audio"), "error", {
+        get: () => audioError,
+        configurable: true,
+      });
+      document.getElementById("player-audio").dispatchEvent(new Event("error"));
+      expect(errorHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining("decode error") }),
+      );
+    });
+
+    it("does not emit when audioPlayer.error is null", () => {
+      const player = createPlayer();
+      const errorHandler = vi.fn();
+      player.on("error", errorHandler);
+      // audio.error is null by default in jsdom — #handleAudioError should be a no-op
+      document.getElementById("player-audio").dispatchEvent(new Event("error"));
+      expect(errorHandler).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── #togglePlay ───────────────────────────────────────────────────────────────
+
+  describe("#togglePlay (via canvas click)", () => {
+    it("calls play() when audio is paused", () => {
+      createPlayer();
+      const audio = document.getElementById("player-audio");
+      Object.defineProperty(audio, "paused", { get: () => true, configurable: true });
+      document.getElementById("player-canvas").dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      expect(HTMLAudioElement.prototype.play).toHaveBeenCalledOnce();
+    });
+
+    it("calls pause() when audio is not paused", () => {
+      createPlayer();
+      const audio = document.getElementById("player-audio");
+      Object.defineProperty(audio, "paused", { get: () => false, configurable: true });
+      document.getElementById("player-canvas").dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      expect(HTMLAudioElement.prototype.pause).toHaveBeenCalledOnce();
+    });
+
+    it("does not add a click handler when allowClickToPlay is false", () => {
+      createPlayer("player", { allowClickToPlay: false });
+      const audio = document.getElementById("player-audio");
+      Object.defineProperty(audio, "paused", { get: () => true, configurable: true });
+      document.getElementById("player-canvas").dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      expect(HTMLAudioElement.prototype.play).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── #toggleFullscreen ─────────────────────────────────────────────────────────
+
+  describe("#toggleFullscreen (via canvas dblclick)", () => {
+    afterEach(() => {
+      Object.defineProperty(document, "fullscreenElement", {
+        get: () => null,
+        configurable: true,
+      });
+      delete document.exitFullscreen;
+    });
+
+    it("calls document.exitFullscreen when already in fullscreen", () => {
+      createPlayer();
+      const exitFullscreen = vi.fn();
+      Object.defineProperty(document, "fullscreenElement", {
+        get: () => document.body,
+        configurable: true,
+      });
+      document.exitFullscreen = exitFullscreen;
+      document.getElementById("player-canvas").dispatchEvent(
+        new MouseEvent("dblclick", { bubbles: true }),
+      );
+      expect(exitFullscreen).toHaveBeenCalledOnce();
+    });
+
+    it("calls requestFullscreen on the canvas when not in fullscreen", () => {
+      createPlayer();
+      const canvas = document.getElementById("player-canvas");
+      canvas.requestFullscreen = vi.fn();
+      canvas.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+      expect(canvas.requestFullscreen).toHaveBeenCalledOnce();
+    });
+
+    it("does not add a dblclick handler when allowFullscreen is false", () => {
+      createPlayer("player", { allowFullscreen: false });
+      const canvas = document.getElementById("player-canvas");
+      canvas.requestFullscreen = vi.fn();
+      canvas.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+      expect(canvas.requestFullscreen).not.toHaveBeenCalled();
+    });
+  });
+
   // ── CDG update interval ───────────────────────────────────────────────────────
 
   describe("CDG update interval", () => {
@@ -244,6 +371,16 @@ describe("CDGPlayer", () => {
       document.getElementById("player-audio").dispatchEvent(new Event("play"));
       vi.advanceTimersByTime(20);
       expect(CDGDecoder.mock.instances[0].updateFrame).toHaveBeenCalled();
+    });
+
+    it("stops calling updateFrame after audio is aborted", () => {
+      createPlayer();
+      const audio = document.getElementById("player-audio");
+      audio.dispatchEvent(new Event("play"));
+      audio.dispatchEvent(new Event("abort"));
+      const callCount = CDGDecoder.mock.instances[0].updateFrame.mock.calls.length;
+      vi.advanceTimersByTime(100);
+      expect(CDGDecoder.mock.instances[0].updateFrame.mock.calls.length).toBe(callCount);
     });
 
     it("stops calling updateFrame after audio pauses", () => {
