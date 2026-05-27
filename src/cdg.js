@@ -1,4 +1,3 @@
-import { CDGDecoder } from "./CDGDecoder.js";
 import { CDGPlayer } from "./CDGPlayer.js";
 
 /**
@@ -18,5 +17,4 @@ import { CDGPlayer } from "./CDGPlayer.js";
 export function init(containerId, initOptions) {
   return new CDGPlayer(containerId, initOptions);
 }
-
-export { CDGDecoder };
+export { CDGDecoder } from "./CDGDecoder.js";
