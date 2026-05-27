@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { CDGPlayer } from "../src/CDGPlayer.js";
 import { CDGDecoder } from "../src/CDGDecoder.js";
+import { init } from "../src/cdg.js";
 
 vi.mock("../src/CDGDecoder.js", () => ({
   CDGDecoder: vi.fn().mockImplementation(function () {
@@ -48,6 +49,18 @@ describe("CDGPlayer", () => {
       expect(document.getElementById("player-border").className).toBe("cdg-border");
       expect(document.getElementById("player-canvas").className).toBe("cdg-canvas");
       expect(document.getElementById("player-audio").className).toBe("cdg-audio");
+    });
+  });
+
+  // ── init() public factory ────────────────────────────────────────────────────
+
+  describe("init()", () => {
+    it("creates and returns a CDGPlayer via the cdg.js public entry point", () => {
+      const el = document.createElement("div");
+      el.id = "init-player";
+      document.body.appendChild(el);
+      const player = init("init-player");
+      expect(player).toBeInstanceOf(CDGPlayer);
     });
   });
 
