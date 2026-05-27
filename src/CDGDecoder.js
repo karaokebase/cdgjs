@@ -337,13 +337,11 @@ class CDGDecoder {
     const idx1 = cdgPack.codePointAt(5) & 0x0f;
     for (let yInc = 0; yInc < e.FONT_HEIGHT; yInc++) {
       const pixPos = yInc * e.NUM_X_FONTS + startPixel;
-      const currentRow = cdgPack.codePointAt(yInc + 8);
-      let tempPxl = currentRow & 0x20 ? idx1 : idx0;
-      tempPxl |= (currentRow & 0x10 ? idx1 : idx0) << 4;
-      tempPxl |= (currentRow & 0x08 ? idx1 : idx0) << 8;
-      tempPxl |= (currentRow & 0x04 ? idx1 : idx0) << 12;
-      tempPxl |= (currentRow & 0x02 ? idx1 : idx0) << 16;
-      tempPxl |= (currentRow & 0x01 ? idx1 : idx0) << 20;
+      const tempPxl = this.#packPixelRow(
+        cdgPack.codePointAt(yInc + 8),
+        idx0,
+        idx1,
+      );
       if (xorVar) {
         localVram[pixPos] ^= tempPxl;
       } else {
@@ -351,6 +349,21 @@ class CDGDecoder {
       }
     }
     localDirty[yLocation * e.NUM_X_FONTS + xLocation] = 0x01;
+  }
+
+  /**
+   * Packs one 6-pixel font row into a single integer using the given palette indices.
+   * Each bit in currentRow selects idx1 (bit set) or idx0 (bit clear) for its pixel.
+   * Pixels are stored in nibbles at bit positions 0, 4, 8, 12, 16, 20 (MSB → LSB).
+   */
+  #packPixelRow(currentRow, idx0, idx1) {
+    let tempPxl = currentRow & 0x20 ? idx1 : idx0;
+    tempPxl |= (currentRow & 0x10 ? idx1 : idx0) << 4;
+    tempPxl |= (currentRow & 0x08 ? idx1 : idx0) << 8;
+    tempPxl |= (currentRow & 0x04 ? idx1 : idx0) << 12;
+    tempPxl |= (currentRow & 0x02 ? idx1 : idx0) << 16;
+    tempPxl |= (currentRow & 0x01 ? idx1 : idx0) << 20;
+    return tempPxl;
   }
 
   #procDoScroll(cdgPack) {
@@ -368,65 +381,90 @@ class CDGDecoder {
   }
 
   #procVramHscroll(direction, copyFlag, color) {
-    const e = CDGDecoder.#CDG_ENUM;
-    let xSrc, ySrc, yStart, buf;
     const lineColor = this.#fillLineWithPaletteIndex(color);
+    if (direction === 0x02) {
+      this.#hscrollLeft(copyFlag, lineColor);
+    } else if (direction === 0x01) {
+      this.#hscrollRight(copyFlag, lineColor);
+    }
+  }
+
+  /** Shifts every VRAM row one font-block to the left; wraps or fills the vacated rightmost column. */
+  #hscrollLeft(copyFlag, lineColor) {
+    const e = CDGDecoder.#CDG_ENUM;
     const localVram = this.#vram;
     const vramSize = e.NUM_X_FONTS * e.VRAM_HEIGHT;
-    if (direction == 0x02) {
-      for (ySrc = 0; ySrc < vramSize; ySrc += e.NUM_X_FONTS) {
-        yStart = ySrc;
-        buf = localVram[yStart];
-        for (xSrc = yStart + 1; xSrc < yStart + e.NUM_X_FONTS; xSrc++) {
-          localVram[xSrc - 1] = localVram[xSrc];
-        }
-        localVram[yStart + e.NUM_X_FONTS - 1] = copyFlag ? buf : lineColor;
+    for (let ySrc = 0; ySrc < vramSize; ySrc += e.NUM_X_FONTS) {
+      const buf = localVram[ySrc];
+      for (let xSrc = ySrc + 1; xSrc < ySrc + e.NUM_X_FONTS; xSrc++) {
+        localVram[xSrc - 1] = localVram[xSrc];
       }
-    } else if (direction == 0x01) {
-      for (ySrc = 0; ySrc < vramSize; ySrc += e.NUM_X_FONTS) {
-        yStart = ySrc;
-        buf = localVram[yStart + e.NUM_X_FONTS - 1];
-        for (xSrc = yStart + e.NUM_X_FONTS - 2; xSrc >= yStart; xSrc--) {
-          localVram[xSrc + 1] = localVram[xSrc];
-        }
-        localVram[yStart] = copyFlag ? buf : lineColor;
+      localVram[ySrc + e.NUM_X_FONTS - 1] = copyFlag ? buf : lineColor;
+    }
+  }
+
+  /** Shifts every VRAM row one font-block to the right; wraps or fills the vacated leftmost column. */
+  #hscrollRight(copyFlag, lineColor) {
+    const e = CDGDecoder.#CDG_ENUM;
+    const localVram = this.#vram;
+    const vramSize = e.NUM_X_FONTS * e.VRAM_HEIGHT;
+    for (let ySrc = 0; ySrc < vramSize; ySrc += e.NUM_X_FONTS) {
+      const buf = localVram[ySrc + e.NUM_X_FONTS - 1];
+      for (let xSrc = ySrc + e.NUM_X_FONTS - 2; xSrc >= ySrc; xSrc--) {
+        localVram[xSrc + 1] = localVram[xSrc];
       }
+      localVram[ySrc] = copyFlag ? buf : lineColor;
     }
   }
 
   #procVramVscroll(direction, copyFlag, color) {
+    const lineColor = this.#fillLineWithPaletteIndex(color);
+    if (direction === 0x02) {
+      this.#vscrollDown(copyFlag, lineColor);
+    } else if (direction === 0x01) {
+      this.#vscrollUp(copyFlag, lineColor);
+    }
+  }
+
+  /** Shifts all VRAM rows down one font-block height; wraps or fills the vacated top rows. */
+  #vscrollDown(copyFlag, lineColor) {
     const e = CDGDecoder.#CDG_ENUM;
-    let dstIdx, srcIdx;
     const offscreenSize = e.NUM_X_FONTS * e.FONT_HEIGHT;
     const vramSize = e.NUM_X_FONTS * e.VRAM_HEIGHT;
     const scrollStart = e.NUM_X_FONTS * (e.VRAM_HEIGHT - e.FONT_HEIGHT);
     const buf = this.#scrollBuffer;
-    const lineColor = this.#fillLineWithPaletteIndex(color);
     const localVram = this.#vram;
-    if (direction == 0x02) {
-      dstIdx = 0;
-      for (srcIdx = 0; srcIdx < offscreenSize; srcIdx++) {
-        buf[dstIdx++] = localVram[srcIdx];
-      }
-      dstIdx = 0;
-      for (srcIdx = offscreenSize; srcIdx < vramSize; srcIdx++) {
-        localVram[dstIdx++] = localVram[srcIdx];
-      }
-      dstIdx = scrollStart;
-      for (srcIdx = 0; srcIdx < offscreenSize; srcIdx++) {
-        localVram[dstIdx++] = copyFlag ? buf[srcIdx] : lineColor;
-      }
-    } else if (direction == 0x01) {
-      dstIdx = 0;
-      for (srcIdx = scrollStart; srcIdx < vramSize; srcIdx++) {
-        buf[dstIdx++] = localVram[srcIdx];
-      }
-      for (srcIdx = scrollStart - 1; srcIdx > 0; srcIdx--) {
-        localVram[srcIdx + offscreenSize] = localVram[srcIdx];
-      }
-      for (srcIdx = 0; srcIdx < offscreenSize; srcIdx++) {
-        localVram[srcIdx] = copyFlag ? buf[srcIdx] : lineColor;
-      }
+    let dstIdx = 0;
+    for (let srcIdx = 0; srcIdx < offscreenSize; srcIdx++) {
+      buf[dstIdx++] = localVram[srcIdx];
+    }
+    dstIdx = 0;
+    for (let srcIdx = offscreenSize; srcIdx < vramSize; srcIdx++) {
+      localVram[dstIdx++] = localVram[srcIdx];
+    }
+    dstIdx = scrollStart;
+    for (let srcIdx = 0; srcIdx < offscreenSize; srcIdx++) {
+      localVram[dstIdx++] = copyFlag ? buf[srcIdx] : lineColor;
+    }
+  }
+
+  /** Shifts all VRAM rows up one font-block height; wraps or fills the vacated bottom rows. */
+  #vscrollUp(copyFlag, lineColor) {
+    const e = CDGDecoder.#CDG_ENUM;
+    const offscreenSize = e.NUM_X_FONTS * e.FONT_HEIGHT;
+    const vramSize = e.NUM_X_FONTS * e.VRAM_HEIGHT;
+    const scrollStart = e.NUM_X_FONTS * (e.VRAM_HEIGHT - e.FONT_HEIGHT);
+    const buf = this.#scrollBuffer;
+    const localVram = this.#vram;
+    let dstIdx = 0;
+    for (let srcIdx = scrollStart; srcIdx < vramSize; srcIdx++) {
+      buf[dstIdx++] = localVram[srcIdx];
+    }
+    for (let srcIdx = scrollStart - 1; srcIdx > 0; srcIdx--) {
+      localVram[srcIdx + offscreenSize] = localVram[srcIdx];
+    }
+    for (let srcIdx = 0; srcIdx < offscreenSize; srcIdx++) {
+      localVram[srcIdx] = copyFlag ? buf[srcIdx] : lineColor;
     }
   }
 }
