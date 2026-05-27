@@ -59,7 +59,7 @@ var e = class e {
 	}
 	updateFrame(t) {
 		let n = e.#e, r = Math.floor(t * n.PACKS_PER_SECOND), i;
-		r = r < 0 ? 0 : r, r < this.#d - n.PACKS_PER_SECOND && (this.#m(), this.#d = 0), i = this.#d + n.SMOOTHING_PACKS, i = r > i ? r : i, i > this.#d && (this.#g(i), this.#h());
+		r = Math.max(r, 0), r < this.#d - n.PACKS_PER_SECOND && (this.#m(), this.#d = 0), i = this.#d + n.SMOOTHING_PACKS, i = Math.max(r, i), i > this.#d && (this.#g(i), this.#h());
 	}
 	#m() {
 		this.#d = 0, this.#u = 0, this.#a.fill(0), this.#y(0), this.#s.fill(0);
@@ -277,11 +277,19 @@ var e = class e {
 	#m() {
 		this.#r.paused ? this.#r.play() : this.#r.pause();
 	}
-	#h(t, n) {
+	#h(t, n = {}) {
 		if (!t) throw Error("Required initialisation parameter missing.");
 		let r = document.getElementById(t), i = document.createElement("div"), a = document.createElement("canvas");
-		this.#r = document.createElement("audio"), i.id = t + "-border", i.className = "cdg-border", a.id = t + "-canvas", a.className = "cdg-canvas", n && n.allowClickToPlay !== !1 && a.addEventListener("click", () => this.#m(), !0), n && n.allowFullscreen !== !1 && a.addEventListener("dblclick", (e) => this.#p(e), !0), this.#r.id = t + "-audio", this.#r.className = "cdg-audio", i.appendChild(a), r.appendChild(i), r.appendChild(this.#r), this.#r.style.width = a.offsetWidth + "px", this.#r.controls = !(n && n.showControls == 0), this.#r.autoplay = !(n && n.autoplay == 0);
+		this.#r = document.createElement("audio"), i.id = t + "-border", i.className = "cdg-border", a.id = t + "-canvas", a.className = "cdg-canvas";
 		let o = {
+			allowClickToPlay: !0,
+			allowFullscreen: !0,
+			autoplay: !0,
+			showControls: !0,
+			...n
+		};
+		o.allowClickToPlay && a.addEventListener("click", () => this.#m(), !0), o.allowFullscreen && a.addEventListener("dblclick", (e) => this.#p(e), !0), this.#r.id = t + "-audio", this.#r.className = "cdg-audio", i.appendChild(a), r.appendChild(i), r.appendChild(this.#r), this.#r.style.width = a.offsetWidth + "px", this.#r.controls = o.showControls, this.#r.autoplay = o.autoplay;
+		let s = {
 			error: () => this.#l(),
 			play: () => this.#u(),
 			pause: () => this.#d(),
@@ -290,7 +298,7 @@ var e = class e {
 				this.#d(), this.#c("ended");
 			}
 		};
-		for (let [e, t] of Object.entries(o)) this.#r.addEventListener(e, t, !0);
+		for (let [e, t] of Object.entries(s)) this.#r.addEventListener(e, t, !0);
 		this.#o = new e(a, i);
 	}
 };

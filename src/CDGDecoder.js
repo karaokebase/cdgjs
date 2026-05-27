@@ -75,7 +75,7 @@ class CDGDecoder {
     const e = CDGDecoder.#CDG_ENUM;
     let playPosition = Math.floor(currentTime * e.PACKS_PER_SECOND);
     let positionToPlay;
-    playPosition = playPosition < 0 ? 0 : playPosition;
+    playPosition = Math.max(playPosition, 0);
     // Render from the beginning of the stream if a reverse seek of more than one second occurred.
     if (playPosition < this.#currentPack - e.PACKS_PER_SECOND) {
       this.#resetCdgState();
@@ -83,8 +83,7 @@ class CDGDecoder {
     }
     positionToPlay = this.#currentPack + e.SMOOTHING_PACKS;
     // Jump to the actual play position if it's ahead of our calculated smoothed position.
-    positionToPlay =
-      playPosition > positionToPlay ? playPosition : positionToPlay;
+    positionToPlay = Math.max(playPosition, positionToPlay);
     // Check if we should render any packs, and do so if needed.
     if (positionToPlay > this.#currentPack) {
       this.#decodePacks(positionToPlay);

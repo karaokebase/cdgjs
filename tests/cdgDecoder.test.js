@@ -11,6 +11,7 @@ const LOAD_CLUT_HI = 0x1f;
 const COPY_FONT = 0x06;
 const XOR_FONT = 0x26;
 const SCROLL_COPY = 0x18;
+const SCROLL_PRESET = 0x14;
 
 // Builds a 24-byte CDG pack as a string. Data bytes are placed starting at
 // offset 4 (the subcode data region); bytes outside data default to 0.
@@ -167,6 +168,16 @@ describe("CDGDecoder", () => {
       decoder.updateFrame(0);
       expect(borderDiv.style.backgroundColor).toBe("rgb(255,0,0)");
     });
+
+    it("does not mark border dirty when the new index has the same palette color", () => {
+      // BORDER_PRESET(0) when borderIndex is already 0 and palette[0]=0:
+      // palette[newIndex] == palette[borderIndex] → borderDirty is NOT set.
+      // The border colour was already set to "rgb(0,0,0)" by setCdgData's own redrawCanvas.
+      const borderPack = makePack(TV_GRAPHICS, BORDER_PRESET, [0]);
+      decoder.setCdgData(borderPack);
+      decoder.updateFrame(0);
+      expect(borderDiv.style.backgroundColor).toBe("rgb(0,0,0)");
+    });
   });
 
   describe("COPY_FONT", () => {
@@ -176,6 +187,44 @@ describe("CDGDecoder", () => {
       // CLUT's screenDirty) reads the already-updated VRAM.
       const clutPack = makeClutPack(LOAD_CLUT_LO, [[0, 0, 0], [15, 0, 0]]);
       const fontPack = makeFontPack(COPY_FONT, 1, 1, 0, 1, new Array(12).fill(0x3f));
+      decoder.setCdgData(clutPack + fontPack);
+      decoder.updateFrame(0);
+      expect(pixelAt(mock.imageData, 0, 0)).toEqual([255, 0, 0, 255]);
+    });
+
+    it("skips write when the font pack targets an inactive channel", () => {
+      // bytes[4] = 0x20 sets subcode channel bits: subcodeChannel = (0x20 & 0x30) >> 2 = 8.
+      // activeChannels = 0x03 → (0x03 >> 8) & 1 = 0 → inactive → early return (line 325).
+      const clutPack = makeClutPack(LOAD_CLUT_LO, [[0, 0, 0], [15, 0, 0]]);
+      const inactivePack = makePack(TV_GRAPHICS, COPY_FONT, [0x20]);
+      decoder.setCdgData(clutPack + inactivePack);
+      decoder.updateFrame(0);
+      expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 0, 255]); // VRAM unchanged
+    });
+
+    it("skips write when xLocation is out of bounds (>= NUM_X_FONTS)", () => {
+      // xLoc=50 >= NUM_X_FONTS=50 → early return (line 331).
+      const clutPack = makeClutPack(LOAD_CLUT_LO, [[0, 0, 0], [15, 0, 0]]);
+      const fontPack = makeFontPack(COPY_FONT, 50, 1, 0, 1, new Array(12).fill(0x3f));
+      decoder.setCdgData(clutPack + fontPack);
+      decoder.updateFrame(0);
+      expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 0, 255]); // VRAM unchanged
+    });
+
+    it("skips write when yLocation is out of bounds (>= NUM_Y_FONTS)", () => {
+      // yLoc=18 >= NUM_Y_FONTS=18 → early return (line 331).
+      const clutPack = makeClutPack(LOAD_CLUT_LO, [[0, 0, 0], [15, 0, 0]]);
+      const fontPack = makeFontPack(COPY_FONT, 1, 18, 0, 1, new Array(12).fill(0x3f));
+      decoder.setCdgData(clutPack + fontPack);
+      decoder.updateFrame(0);
+      expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 0, 255]); // VRAM unchanged
+    });
+
+    it("uses color0 (idx0) for pixel bits that are clear in the row data", () => {
+      // rows=0x00: all bits clear → all six ternaries take the false (idx0) branch.
+      // color0=1 (red index), color1=0 (black index) → every pixel = palette[1] = red.
+      const clutPack = makeClutPack(LOAD_CLUT_LO, [[0, 0, 0], [15, 0, 0]]);
+      const fontPack = makeFontPack(COPY_FONT, 1, 1, 1, 0, new Array(12).fill(0x00));
       decoder.setCdgData(clutPack + fontPack);
       decoder.updateFrame(0);
       expect(pixelAt(mock.imageData, 0, 0)).toEqual([255, 0, 0, 255]);
@@ -254,6 +303,102 @@ describe("CDGDecoder", () => {
     decoder.setCdgData(makePack(TV_GRAPHICS, 0x99));
     decoder.updateFrame(0);
     expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 0, 255]);
+  });
+
+  // ── dirty-block incremental render ─────────────────────────────────────────
+
+  describe("dirty-block incremental render", () => {
+    it("renders dirty blocks via #renderBlockToRgb without a full-screen redraw", () => {
+      // Pack 0: LOAD_CLUT_LO → screenDirty=true → first tick triggers full render.
+      // Pack 6: COPY_FONT   → only marks a dirty block (screenDirty stays false) →
+      //   second tick takes the incremental else-branch in #redrawCanvas and
+      //   calls #renderBlockToRgb to patch just the changed block.
+      const clutPack = makeClutPack(LOAD_CLUT_LO, [[0, 0, 0], [15, 0, 0]]);
+      const emptyPack = makePack(0x00, 0x00);
+      const fontPack = makeFontPack(COPY_FONT, 1, 1, 0, 1, new Array(12).fill(0x3f));
+      decoder.setCdgData(clutPack + emptyPack.repeat(5) + fontPack);
+      decoder.updateFrame(0);        // packs 0–5: CLUT → full render, palette[1]=red
+      decoder.updateFrame(7 / 300); // pack 6: COPY_FONT → dirty block → incremental render
+      expect(pixelAt(mock.imageData, 0, 0)).toEqual([255, 0, 0, 255]);
+    });
+  });
+
+  // ── SCROLL_COPY — additional directions ────────────────────────────────────
+
+  describe("SCROLL_COPY right (direction=1)", () => {
+    it("preserves uniform VRAM content after a rightward copy scroll", () => {
+      // hDirection = (0x10 & 0x30) >> 4 = 1 (right); copyFlag=1 (SCROLL_COPY).
+      // With all-blue VRAM the wrapped column is also blue → visible pixels unchanged.
+      const clutPack = makeClutPack(LOAD_CLUT_HI, [[0, 0, 15]]);
+      const memPreset = makePack(TV_GRAPHICS, MEMORY_PRESET, [8]);
+      const scrollPack = makePack(TV_GRAPHICS, SCROLL_COPY, [0, 0x10, 0]);
+      decoder.setCdgData(clutPack + memPreset + scrollPack);
+      decoder.updateFrame(0);
+      expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 255, 255]);
+      expect(pixelAt(mock.imageData, 287, 191)).toEqual([0, 0, 255, 255]);
+    });
+  });
+
+  describe("SCROLL_COPY up (direction=1)", () => {
+    it("preserves uniform VRAM content after an upward copy scroll", () => {
+      // vDirection = (0x10 & 0x30) >> 4 = 1 (up); copyFlag=1 (SCROLL_COPY).
+      // With all-blue VRAM the wrapped row is also blue → visible pixels unchanged.
+      const clutPack = makeClutPack(LOAD_CLUT_HI, [[0, 0, 15]]);
+      const memPreset = makePack(TV_GRAPHICS, MEMORY_PRESET, [8]);
+      const scrollPack = makePack(TV_GRAPHICS, SCROLL_COPY, [0, 0, 0x10]);
+      decoder.setCdgData(clutPack + memPreset + scrollPack);
+      decoder.updateFrame(0);
+      expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 255, 255]);
+      expect(pixelAt(mock.imageData, 287, 191)).toEqual([0, 0, 255, 255]);
+    });
+  });
+
+  // ── SCROLL_PRESET (copyFlag=0) ──────────────────────────────────────────────
+
+  describe("SCROLL_PRESET (copyFlag=0)", () => {
+    // SCROLL_PRESET instruction = 0x14: copyFlag = (0x14 & 0x08) >> 3 = 0.
+    // Vacated columns/rows are filled with the specified color (palette[0]=black here).
+    // The visible first pixel is not in the filled column/row, so it stays blue.
+
+    it("fills the vacated column with color on a leftward preset scroll", () => {
+      const clutPack = makeClutPack(LOAD_CLUT_HI, [[0, 0, 15]]);
+      const memPreset = makePack(TV_GRAPHICS, MEMORY_PRESET, [8]);
+      // hDirection=2 (left): rightmost VRAM column gets lineColor; visible pixel[0,0] stays blue.
+      const scrollPack = makePack(TV_GRAPHICS, SCROLL_PRESET, [0, 0x20, 0]);
+      decoder.setCdgData(clutPack + memPreset + scrollPack);
+      decoder.updateFrame(0);
+      expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 255, 255]);
+    });
+
+    it("fills the vacated column with color on a rightward preset scroll", () => {
+      const clutPack = makeClutPack(LOAD_CLUT_HI, [[0, 0, 15]]);
+      const memPreset = makePack(TV_GRAPHICS, MEMORY_PRESET, [8]);
+      // hDirection=1 (right): leftmost VRAM column gets lineColor; visible pixel[0,0] shifts in the old col-0 (blue).
+      const scrollPack = makePack(TV_GRAPHICS, SCROLL_PRESET, [0, 0x10, 0]);
+      decoder.setCdgData(clutPack + memPreset + scrollPack);
+      decoder.updateFrame(0);
+      expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 255, 255]);
+    });
+
+    it("fills the vacated row with color on a downward preset scroll", () => {
+      const clutPack = makeClutPack(LOAD_CLUT_HI, [[0, 0, 15]]);
+      const memPreset = makePack(TV_GRAPHICS, MEMORY_PRESET, [8]);
+      // vDirection=2 (down): bottom VRAM row gets lineColor; visible pixel[0,0] shifts in the old row-0 (blue).
+      const scrollPack = makePack(TV_GRAPHICS, SCROLL_PRESET, [0, 0, 0x20]);
+      decoder.setCdgData(clutPack + memPreset + scrollPack);
+      decoder.updateFrame(0);
+      expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 255, 255]);
+    });
+
+    it("fills the vacated row with color on an upward preset scroll", () => {
+      const clutPack = makeClutPack(LOAD_CLUT_HI, [[0, 0, 15]]);
+      const memPreset = makePack(TV_GRAPHICS, MEMORY_PRESET, [8]);
+      // vDirection=1 (up): top VRAM rows get lineColor; visible pixel[0,0] shifts in the old row-0 (blue).
+      const scrollPack = makePack(TV_GRAPHICS, SCROLL_PRESET, [0, 0, 0x10]);
+      decoder.setCdgData(clutPack + memPreset + scrollPack);
+      decoder.updateFrame(0);
+      expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 255, 255]);
+    });
   });
 
   // ── updateFrame — sync behaviour ────────────────────────────────────────────
