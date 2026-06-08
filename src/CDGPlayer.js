@@ -27,6 +27,7 @@ class CDGPlayer {
   #audioSourceElement = null;
   #cdgIntervalID = null;
   #cdgDecoder = null;
+  #loadingEl = null;
   #listeners = {};
 
   constructor(containerId, initOptions) {
@@ -34,13 +35,14 @@ class CDGPlayer {
   }
 
   /**
-   * Loads a CDG track into the player.
+   * Loads a CDG track into the player using a streaming fetch so that lyrics
+   * begin rendering as soon as the first bytes arrive rather than waiting for
+   * the full file to download.
    * @param {string|TrackOptions} trackOptions - Track filename prefix or full options object
    * @returns {Promise<CDGPlayer>}
    */
   async loadTrack(trackOptions) {
     const trackInfo = this.#parseTrackOptions(trackOptions);
-    let cdgData;
     this.#clearCDGInterval();
     if (this.#audioSourceElement == null) {
       this.#audioSourceElement = document.createElement("source");
@@ -64,17 +66,33 @@ class CDGPlayer {
       if (!response.ok) {
         throw new Error(`CDG file failed to load: ${response.status}`);
       }
-      cdgData = await response.text();
-      this.#cdgDecoder.setCdgData(cdgData);
+      // Initialise the decoder immediately so the audio interval has a valid
+      // (empty) buffer before the first chunk arrives.
+      this.#cdgDecoder.setCdgData(new Uint8Array(0));
+      this.#showLoading();
+      const reader = response.body.getReader();
+      let received = new Uint8Array(0);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        // Grow the accumulation buffer and hand the new view to the decoder.
+        const next = new Uint8Array(received.length + value.length);
+        next.set(received);
+        next.set(value, received.length);
+        received = next;
+        this.#cdgDecoder.updateCdgBuffer(received);
+        this.#hideLoading();
+      }
     } catch (error) {
       this.#emit("error", error);
     }
+    this.#hideLoading();
     return this;
   }
 
   /**
    * Registers an event handler on the player.
-   * @param {string} event - Event name ('error')
+   * @param {string} event - Event name ('error' | 'ended')
    * @param {Function} handler - Handler function
    * @returns {CDGPlayer}
    */
@@ -109,6 +127,18 @@ class CDGPlayer {
       }
     } else if (event === "error") {
       console.error(...args);
+    }
+  }
+
+  #showLoading() {
+    if (this.#loadingEl) {
+      this.#loadingEl.style.display = "";
+    }
+  }
+
+  #hideLoading() {
+    if (this.#loadingEl) {
+      this.#loadingEl.style.display = "none";
     }
   }
 
@@ -202,13 +232,14 @@ class CDGPlayer {
     borderEl.className = "cdg-border";
     canvasEl.id = containerId + "-canvas";
     canvasEl.className = "cdg-canvas";
-    let defaultConfig = {
+    const defaultConfig = {
       allowClickToPlay: true,
       allowFullscreen: true,
       autoplay: true,
       showControls: true,
+      showLoadingIndicator: true,
     };
-    let config = {
+    const config = {
       ...defaultConfig,
       ...initOptions,
     };
@@ -221,6 +252,13 @@ class CDGPlayer {
         (e) => this.#toggleFullscreen(e),
         true,
       );
+    }
+    if (config.showLoadingIndicator) {
+      this.#loadingEl = document.createElement("div");
+      this.#loadingEl.id = containerId + "-loading";
+      this.#loadingEl.className = "cdg-loading";
+      this.#loadingEl.style.display = "none";
+      borderEl.appendChild(this.#loadingEl);
     }
     this.#audioPlayer.id = containerId + "-audio";
     this.#audioPlayer.className = "cdg-audio";

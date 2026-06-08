@@ -7,9 +7,28 @@ import { init } from "../src/cdg.js";
 vi.mock("../src/CDGDecoder.js", () => ({
   CDGDecoder: vi.fn().mockImplementation(function () {
     this.setCdgData = vi.fn();
+    this.updateCdgBuffer = vi.fn();
     this.updateFrame = vi.fn();
   }),
 }));
+
+// Returns a minimal streaming fetch mock that yields the given chunks then closes.
+function makeStreamingFetch(chunks = []) {
+  let index = 0;
+  return vi.fn().mockResolvedValue({
+    ok: true,
+    body: {
+      getReader: () => ({
+        read: vi.fn().mockImplementation(() => {
+          if (index < chunks.length) {
+            return Promise.resolve({ done: false, value: chunks[index++] });
+          }
+          return Promise.resolve({ done: true, value: undefined });
+        }),
+      }),
+    },
+  });
+}
 
 // jsdom does not implement media element methods.
 HTMLAudioElement.prototype.load = vi.fn();
@@ -208,23 +227,77 @@ describe("CDGPlayer", () => {
       );
     });
 
-    it("calls setCdgData on the decoder when fetch succeeds", async () => {
-      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-        ok: true,
-        text: vi.fn().mockResolvedValue("cdg-payload"),
-      }));
+    it("initialises the decoder with an empty buffer then streams chunks via updateCdgBuffer", async () => {
+      const chunk = new Uint8Array([1, 2, 3, 4]);
+      vi.stubGlobal("fetch", makeStreamingFetch([chunk]));
       const player = createPlayer();
       await player.loadTrack("song");
-      expect(CDGDecoder.mock.instances[0].setCdgData).toHaveBeenCalledWith("cdg-payload");
+      const decoder = CDGDecoder.mock.instances[0];
+      // setCdgData called once with an empty Uint8Array to reset state
+      expect(decoder.setCdgData).toHaveBeenCalledWith(new Uint8Array(0));
+      // updateCdgBuffer called with the accumulated bytes from the stream
+      expect(decoder.updateCdgBuffer).toHaveBeenCalledWith(chunk);
+    });
+
+    it("accumulates multiple chunks before each updateCdgBuffer call", async () => {
+      const chunk1 = new Uint8Array([1, 2]);
+      const chunk2 = new Uint8Array([3, 4]);
+      vi.stubGlobal("fetch", makeStreamingFetch([chunk1, chunk2]));
+      const player = createPlayer();
+      await player.loadTrack("song");
+      const calls = CDGDecoder.mock.instances[0].updateCdgBuffer.mock.calls;
+      // Second call must include all bytes received so far
+      expect(calls[calls.length - 1][0]).toEqual(new Uint8Array([1, 2, 3, 4]));
     });
 
     it("returns the player for chaining", async () => {
-      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-        ok: true,
-        text: vi.fn().mockResolvedValue(""),
-      }));
+      vi.stubGlobal("fetch", makeStreamingFetch([]));
       const player = createPlayer();
       expect(await player.loadTrack("song")).toBe(player);
+    });
+  });
+
+  // ── loading indicator ─────────────────────────────────────────────────────────
+
+  describe("loading indicator", () => {
+    it("creates a cdg-loading element inside the border by default", () => {
+      createPlayer();
+      expect(document.getElementById("player-loading")).not.toBeNull();
+      expect(document.getElementById("player-loading").className).toBe("cdg-loading");
+    });
+
+    it("does not create the loading element when showLoadingIndicator is false", () => {
+      createPlayer("player", { showLoadingIndicator: false });
+      expect(document.getElementById("player-loading")).toBeNull();
+    });
+
+    it("shows the loading element while the stream is in progress and hides it when done", async () => {
+      let resolveRead;
+      const pendingRead = new Promise((r) => { resolveRead = r; });
+      let callCount = 0;
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+        ok: true,
+        body: {
+          getReader: () => ({
+            read: vi.fn().mockImplementation(() => {
+              if (callCount++ === 0) return pendingRead;
+              return Promise.resolve({ done: true, value: undefined });
+            }),
+          }),
+        },
+      }));
+
+      const player = createPlayer();
+      const loadingEl = document.getElementById("player-loading");
+
+      const trackPromise = player.loadTrack("song");
+      // Yield to the event loop so loadTrack runs up to the first reader.read() await.
+      await Promise.resolve();
+      expect(loadingEl.style.display).toBe(""); // visible while waiting for chunk
+
+      resolveRead({ done: false, value: new Uint8Array([0]) });
+      await trackPromise;
+      expect(loadingEl.style.display).toBe("none"); // hidden once stream is done
     });
   });
 

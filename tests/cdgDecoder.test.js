@@ -13,16 +13,37 @@ const XOR_FONT = 0x26;
 const SCROLL_COPY = 0x18;
 const SCROLL_PRESET = 0x14;
 
-// Builds a 24-byte CDG pack as a string. Data bytes are placed starting at
+// Builds a 24-byte CDG pack as a Uint8Array. Data bytes are placed starting at
 // offset 4 (the subcode data region); bytes outside data default to 0.
 function makePack(command, instruction, data = []) {
-  const bytes = new Array(24).fill(0);
+  const bytes = new Uint8Array(24);
   bytes[0] = command;
   bytes[1] = instruction;
   data.forEach((b, i) => {
     bytes[4 + i] = b;
   });
-  return String.fromCharCode(...bytes);
+  return bytes;
+}
+
+// Concatenates any number of Uint8Array packs into a single Uint8Array.
+function concatPacks(...packs) {
+  const totalLength = packs.reduce((sum, p) => sum + p.length, 0);
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const p of packs) {
+    result.set(p, offset);
+    offset += p.length;
+  }
+  return result;
+}
+
+// Returns a Uint8Array containing `pack` repeated `n` times.
+function repeatPack(pack, n) {
+  const result = new Uint8Array(pack.length * n);
+  for (let i = 0; i < n; i++) {
+    result.set(pack, i * pack.length);
+  }
+  return result;
 }
 
 // Encodes a single 4-bit-per-channel RGB color into the two-byte CDG CLUT
@@ -113,6 +134,40 @@ describe("CDGDecoder", () => {
     });
   });
 
+  // ── updateCdgBuffer (progressive / streaming loading) ──────────────────────
+
+  describe("updateCdgBuffer", () => {
+    it("extends the decodable range as new data arrives", () => {
+      // Start with only the CLUT pack (palette[1]=green, VRAM stays black).
+      const clutPack = makeClutPack(LOAD_CLUT_LO, [[0, 0, 0], [0, 15, 0]]);
+      const memPack = makePack(TV_GRAPHICS, MEMORY_PRESET, [1]);
+      decoder.setCdgData(clutPack);
+      decoder.updateFrame(0);
+      expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 0, 255]); // VRAM still all index 0
+
+      // Extend the buffer to include MEMORY_PRESET; decoder should now render green.
+      decoder.updateCdgBuffer(concatPacks(clutPack, memPack));
+      decoder.updateFrame(2 / 300);
+      expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 255, 0, 255]);
+    });
+
+    it("does not advance past available packs when audio is ahead of the download", () => {
+      // Decoder has 1 pack (CLUT sets palette[0]=red), audio is far ahead.
+      const clutPack = makeClutPack(LOAD_CLUT_LO, [[15, 0, 0]]);
+      decoder.setCdgData(clutPack);
+      decoder.updateFrame(60); // audio at 60 s = 18 000 packs; only pack 0 is available
+      // VRAM is all index 0; palette[0] = red → full screen is red.
+      expect(pixelAt(mock.imageData, 0, 0)).toEqual([255, 0, 0, 255]);
+
+      // More data arrives: MEMORY_PRESET(1) + CLUT_HI makes palette[8]=blue and VRAM index 8.
+      const memPack = makePack(TV_GRAPHICS, MEMORY_PRESET, [8]);
+      const clutHi = makeClutPack(LOAD_CLUT_HI, [[0, 0, 15]]);
+      decoder.updateCdgBuffer(concatPacks(clutPack, memPack, clutHi));
+      decoder.updateFrame(60); // still at 60 s; decoder catches up to pack 3
+      expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 255, 255]);
+    });
+  });
+
   // ── updateFrame — instruction processing ────────────────────────────────────
 
   describe("LOAD_CLUT_LO", () => {
@@ -134,7 +189,7 @@ describe("CDGDecoder", () => {
       // palette[8] = blue via CLUT_HI, then MEMORY_PRESET fills VRAM with index 8.
       const clutPack = makeClutPack(LOAD_CLUT_HI, [[0, 0, 15]]);
       const memPreset = makePack(TV_GRAPHICS, MEMORY_PRESET, [8]);
-      decoder.setCdgData(clutPack + memPreset);
+      decoder.setCdgData(concatPacks(clutPack, memPreset));
       decoder.updateFrame(0);
       expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 255, 255]);
     });
@@ -145,7 +200,7 @@ describe("CDGDecoder", () => {
       // palette[1] = green, MEMORY_PRESET fills all VRAM with index 1.
       const clutPack = makeClutPack(LOAD_CLUT_LO, [[0, 0, 0], [0, 15, 0]]);
       const memPreset = makePack(TV_GRAPHICS, MEMORY_PRESET, [1]);
-      decoder.setCdgData(clutPack + memPreset);
+      decoder.setCdgData(concatPacks(clutPack, memPreset));
       decoder.updateFrame(0);
       expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 255, 0, 255]);
       expect(pixelAt(mock.imageData, 287, 191)).toEqual([0, 255, 0, 255]);
@@ -156,7 +211,7 @@ describe("CDGDecoder", () => {
     it("sets the border div background color to the specified palette entry", () => {
       const clutPack = makeClutPack(LOAD_CLUT_LO, [[0, 0, 0], [0, 0, 15]]);
       const borderPack = makePack(TV_GRAPHICS, BORDER_PRESET, [1]);
-      decoder.setCdgData(clutPack + borderPack);
+      decoder.setCdgData(concatPacks(clutPack, borderPack));
       decoder.updateFrame(0);
       expect(borderDiv.style.backgroundColor).toBe("rgb(0,0,255)");
     });
@@ -187,7 +242,7 @@ describe("CDGDecoder", () => {
       // CLUT's screenDirty) reads the already-updated VRAM.
       const clutPack = makeClutPack(LOAD_CLUT_LO, [[0, 0, 0], [15, 0, 0]]);
       const fontPack = makeFontPack(COPY_FONT, 1, 1, 0, 1, new Array(12).fill(0x3f));
-      decoder.setCdgData(clutPack + fontPack);
+      decoder.setCdgData(concatPacks(clutPack, fontPack));
       decoder.updateFrame(0);
       expect(pixelAt(mock.imageData, 0, 0)).toEqual([255, 0, 0, 255]);
     });
@@ -197,7 +252,7 @@ describe("CDGDecoder", () => {
       // activeChannels = 0x03 → (0x03 >> 8) & 1 = 0 → inactive → early return (line 325).
       const clutPack = makeClutPack(LOAD_CLUT_LO, [[0, 0, 0], [15, 0, 0]]);
       const inactivePack = makePack(TV_GRAPHICS, COPY_FONT, [0x20]);
-      decoder.setCdgData(clutPack + inactivePack);
+      decoder.setCdgData(concatPacks(clutPack, inactivePack));
       decoder.updateFrame(0);
       expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 0, 255]); // VRAM unchanged
     });
@@ -206,7 +261,7 @@ describe("CDGDecoder", () => {
       // xLoc=50 >= NUM_X_FONTS=50 → early return (line 331).
       const clutPack = makeClutPack(LOAD_CLUT_LO, [[0, 0, 0], [15, 0, 0]]);
       const fontPack = makeFontPack(COPY_FONT, 50, 1, 0, 1, new Array(12).fill(0x3f));
-      decoder.setCdgData(clutPack + fontPack);
+      decoder.setCdgData(concatPacks(clutPack, fontPack));
       decoder.updateFrame(0);
       expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 0, 255]); // VRAM unchanged
     });
@@ -215,7 +270,7 @@ describe("CDGDecoder", () => {
       // yLoc=18 >= NUM_Y_FONTS=18 → early return (line 331).
       const clutPack = makeClutPack(LOAD_CLUT_LO, [[0, 0, 0], [15, 0, 0]]);
       const fontPack = makeFontPack(COPY_FONT, 1, 18, 0, 1, new Array(12).fill(0x3f));
-      decoder.setCdgData(clutPack + fontPack);
+      decoder.setCdgData(concatPacks(clutPack, fontPack));
       decoder.updateFrame(0);
       expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 0, 255]); // VRAM unchanged
     });
@@ -225,7 +280,7 @@ describe("CDGDecoder", () => {
       // color0=1 (red index), color1=0 (black index) → every pixel = palette[1] = red.
       const clutPack = makeClutPack(LOAD_CLUT_LO, [[0, 0, 0], [15, 0, 0]]);
       const fontPack = makeFontPack(COPY_FONT, 1, 1, 1, 0, new Array(12).fill(0x00));
-      decoder.setCdgData(clutPack + fontPack);
+      decoder.setCdgData(concatPacks(clutPack, fontPack));
       decoder.updateFrame(0);
       expect(pixelAt(mock.imageData, 0, 0)).toEqual([255, 0, 0, 255]);
     });
@@ -239,70 +294,10 @@ describe("CDGDecoder", () => {
       const allOnes = new Array(12).fill(0x3f);
       const copyPack = makeFontPack(COPY_FONT, 1, 1, 0, 1, allOnes);
       const xorPack = makeFontPack(XOR_FONT, 1, 1, 0, 1, allOnes);
-      decoder.setCdgData(clutPack + copyPack + xorPack);
+      decoder.setCdgData(concatPacks(clutPack, copyPack, xorPack));
       decoder.updateFrame(0);
       expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 0, 255]);
     });
-  });
-
-  describe("SCROLL_COPY vertical", () => {
-    it("preserves uniform VRAM content after a vertical copy scroll", () => {
-      // Fill VRAM with blue (palette[8]) then scroll down with copyFlag=1.
-      // Since all rows are identical, wrapping the offscreen row back in leaves
-      // every pixel unchanged — verifying Uint32Array copy in procVramVscroll.
-      const clutPack = makeClutPack(LOAD_CLUT_HI, [[0, 0, 15]]);
-      const memPreset = makePack(TV_GRAPHICS, MEMORY_PRESET, [8]);
-      // data[0]=color, data[1]=h-dir (0=none), data[2]=v-dir (0x20 = down)
-      const scrollPack = makePack(TV_GRAPHICS, SCROLL_COPY, [0, 0, 0x20]);
-      decoder.setCdgData(clutPack + memPreset + scrollPack);
-      decoder.updateFrame(0);
-      expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 255, 255]);
-      expect(pixelAt(mock.imageData, 287, 191)).toEqual([0, 0, 255, 255]);
-    });
-  });
-
-  describe("SCROLL_COPY horizontal", () => {
-    it("preserves uniform VRAM content after a horizontal copy scroll", () => {
-      // Fill VRAM with blue (palette[8]) then scroll left with copyFlag=1.
-      // Since all columns are identical, wrapping the offscreen column back in
-      // leaves every pixel unchanged — verifying Uint32Array copy in procVramHscroll.
-      const clutPack = makeClutPack(LOAD_CLUT_HI, [[0, 0, 15]]);
-      const memPreset = makePack(TV_GRAPHICS, MEMORY_PRESET, [8]);
-      // data[0]=color, data[1]=h-dir (0x20 = left), data[2]=v-dir (0=none)
-      const scrollPack = makePack(TV_GRAPHICS, SCROLL_COPY, [0, 0x20, 0]);
-      decoder.setCdgData(clutPack + memPreset + scrollPack);
-      decoder.updateFrame(0);
-      expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 255, 255]);
-      expect(pixelAt(mock.imageData, 287, 191)).toEqual([0, 0, 255, 255]);
-    });
-  });
-
-  describe("max-value palette entry", () => {
-    it("stores and renders a white palette entry (0xFFFFFF) correctly via Uint32Array", () => {
-      // palette[15] = white (R=15, G=15, B=15 → 0xFFFFFF), which is the largest
-      // value stored in palette's Uint32Array. MEMORY_PRESET(15) fills all VRAM.
-      const clutPack = makeClutPack(LOAD_CLUT_HI, [
-        [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0],
-        [0, 0, 0], [0, 0, 0], [0, 0, 0], [15, 15, 15],
-      ]);
-      const memPreset = makePack(TV_GRAPHICS, MEMORY_PRESET, [15]);
-      decoder.setCdgData(clutPack + memPreset);
-      decoder.updateFrame(0);
-      expect(pixelAt(mock.imageData, 0, 0)).toEqual([255, 255, 255, 255]);
-      expect(pixelAt(mock.imageData, 143, 95)).toEqual([255, 255, 255, 255]);
-    });
-  });
-
-  it("ignores non-TV_GRAPHICS commands", () => {
-    decoder.setCdgData(makePack(0x00, MEMORY_PRESET));
-    decoder.updateFrame(0);
-    expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 0, 255]);
-  });
-
-  it("ignores unknown TV_GRAPHICS instructions", () => {
-    decoder.setCdgData(makePack(TV_GRAPHICS, 0x99));
-    decoder.updateFrame(0);
-    expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 0, 255]);
   });
 
   // ── dirty-block incremental render ─────────────────────────────────────────
@@ -316,14 +311,48 @@ describe("CDGDecoder", () => {
       const clutPack = makeClutPack(LOAD_CLUT_LO, [[0, 0, 0], [15, 0, 0]]);
       const emptyPack = makePack(0x00, 0x00);
       const fontPack = makeFontPack(COPY_FONT, 1, 1, 0, 1, new Array(12).fill(0x3f));
-      decoder.setCdgData(clutPack + emptyPack.repeat(5) + fontPack);
+      decoder.setCdgData(concatPacks(clutPack, repeatPack(emptyPack, 5), fontPack));
       decoder.updateFrame(0);        // packs 0–5: CLUT → full render, palette[1]=red
       decoder.updateFrame(7 / 300); // pack 6: COPY_FONT → dirty block → incremental render
       expect(pixelAt(mock.imageData, 0, 0)).toEqual([255, 0, 0, 255]);
     });
   });
 
-  // ── SCROLL_COPY — additional directions ────────────────────────────────────
+  // ── SCROLL_COPY — vertical ──────────────────────────────────────────────────
+
+  describe("SCROLL_COPY vertical", () => {
+    it("preserves uniform VRAM content after a vertical copy scroll", () => {
+      // Fill VRAM with blue (palette[8]) then scroll down with copyFlag=1.
+      // Since all rows are identical, wrapping the offscreen row back in leaves
+      // every pixel unchanged — verifying Uint32Array copy in procVramVscroll.
+      const clutPack = makeClutPack(LOAD_CLUT_HI, [[0, 0, 15]]);
+      const memPreset = makePack(TV_GRAPHICS, MEMORY_PRESET, [8]);
+      // data[0]=color, data[1]=h-dir (0=none), data[2]=v-dir (0x20 = down)
+      const scrollPack = makePack(TV_GRAPHICS, SCROLL_COPY, [0, 0, 0x20]);
+      decoder.setCdgData(concatPacks(clutPack, memPreset, scrollPack));
+      decoder.updateFrame(0);
+      expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 255, 255]);
+      expect(pixelAt(mock.imageData, 287, 191)).toEqual([0, 0, 255, 255]);
+    });
+  });
+
+  // ── SCROLL_COPY — horizontal ────────────────────────────────────────────────
+
+  describe("SCROLL_COPY horizontal", () => {
+    it("preserves uniform VRAM content after a horizontal copy scroll", () => {
+      // Fill VRAM with blue (palette[8]) then scroll left with copyFlag=1.
+      // Since all columns are identical, wrapping the offscreen column back in
+      // leaves every pixel unchanged — verifying Uint32Array copy in procVramHscroll.
+      const clutPack = makeClutPack(LOAD_CLUT_HI, [[0, 0, 15]]);
+      const memPreset = makePack(TV_GRAPHICS, MEMORY_PRESET, [8]);
+      // data[0]=color, data[1]=h-dir (0x20 = left), data[2]=v-dir (0=none)
+      const scrollPack = makePack(TV_GRAPHICS, SCROLL_COPY, [0, 0x20, 0]);
+      decoder.setCdgData(concatPacks(clutPack, memPreset, scrollPack));
+      decoder.updateFrame(0);
+      expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 255, 255]);
+      expect(pixelAt(mock.imageData, 287, 191)).toEqual([0, 0, 255, 255]);
+    });
+  });
 
   describe("SCROLL_COPY right (direction=1)", () => {
     it("preserves uniform VRAM content after a rightward copy scroll", () => {
@@ -332,7 +361,7 @@ describe("CDGDecoder", () => {
       const clutPack = makeClutPack(LOAD_CLUT_HI, [[0, 0, 15]]);
       const memPreset = makePack(TV_GRAPHICS, MEMORY_PRESET, [8]);
       const scrollPack = makePack(TV_GRAPHICS, SCROLL_COPY, [0, 0x10, 0]);
-      decoder.setCdgData(clutPack + memPreset + scrollPack);
+      decoder.setCdgData(concatPacks(clutPack, memPreset, scrollPack));
       decoder.updateFrame(0);
       expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 255, 255]);
       expect(pixelAt(mock.imageData, 287, 191)).toEqual([0, 0, 255, 255]);
@@ -346,7 +375,7 @@ describe("CDGDecoder", () => {
       const clutPack = makeClutPack(LOAD_CLUT_HI, [[0, 0, 15]]);
       const memPreset = makePack(TV_GRAPHICS, MEMORY_PRESET, [8]);
       const scrollPack = makePack(TV_GRAPHICS, SCROLL_COPY, [0, 0, 0x10]);
-      decoder.setCdgData(clutPack + memPreset + scrollPack);
+      decoder.setCdgData(concatPacks(clutPack, memPreset, scrollPack));
       decoder.updateFrame(0);
       expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 255, 255]);
       expect(pixelAt(mock.imageData, 287, 191)).toEqual([0, 0, 255, 255]);
@@ -365,7 +394,7 @@ describe("CDGDecoder", () => {
       const memPreset = makePack(TV_GRAPHICS, MEMORY_PRESET, [8]);
       // hDirection=2 (left): rightmost VRAM column gets lineColor; visible pixel[0,0] stays blue.
       const scrollPack = makePack(TV_GRAPHICS, SCROLL_PRESET, [0, 0x20, 0]);
-      decoder.setCdgData(clutPack + memPreset + scrollPack);
+      decoder.setCdgData(concatPacks(clutPack, memPreset, scrollPack));
       decoder.updateFrame(0);
       expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 255, 255]);
     });
@@ -375,7 +404,7 @@ describe("CDGDecoder", () => {
       const memPreset = makePack(TV_GRAPHICS, MEMORY_PRESET, [8]);
       // hDirection=1 (right): leftmost VRAM column gets lineColor; visible pixel[0,0] shifts in the old col-0 (blue).
       const scrollPack = makePack(TV_GRAPHICS, SCROLL_PRESET, [0, 0x10, 0]);
-      decoder.setCdgData(clutPack + memPreset + scrollPack);
+      decoder.setCdgData(concatPacks(clutPack, memPreset, scrollPack));
       decoder.updateFrame(0);
       expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 255, 255]);
     });
@@ -385,7 +414,7 @@ describe("CDGDecoder", () => {
       const memPreset = makePack(TV_GRAPHICS, MEMORY_PRESET, [8]);
       // vDirection=2 (down): bottom VRAM row gets lineColor; visible pixel[0,0] shifts in the old row-0 (blue).
       const scrollPack = makePack(TV_GRAPHICS, SCROLL_PRESET, [0, 0, 0x20]);
-      decoder.setCdgData(clutPack + memPreset + scrollPack);
+      decoder.setCdgData(concatPacks(clutPack, memPreset, scrollPack));
       decoder.updateFrame(0);
       expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 255, 255]);
     });
@@ -395,10 +424,40 @@ describe("CDGDecoder", () => {
       const memPreset = makePack(TV_GRAPHICS, MEMORY_PRESET, [8]);
       // vDirection=1 (up): top VRAM rows get lineColor; visible pixel[0,0] shifts in the old row-0 (blue).
       const scrollPack = makePack(TV_GRAPHICS, SCROLL_PRESET, [0, 0, 0x10]);
-      decoder.setCdgData(clutPack + memPreset + scrollPack);
+      decoder.setCdgData(concatPacks(clutPack, memPreset, scrollPack));
       decoder.updateFrame(0);
       expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 255, 255]);
     });
+  });
+
+  // ── max-value palette entry ─────────────────────────────────────────────────
+
+  describe("max-value palette entry", () => {
+    it("stores and renders a white palette entry (0xFFFFFF) correctly via Uint32Array", () => {
+      // palette[15] = white (R=15, G=15, B=15 → 0xFFFFFF), which is the largest
+      // value stored in palette's Uint32Array. MEMORY_PRESET(15) fills all VRAM.
+      const clutPack = makeClutPack(LOAD_CLUT_HI, [
+        [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0],
+        [0, 0, 0], [0, 0, 0], [0, 0, 0], [15, 15, 15],
+      ]);
+      const memPreset = makePack(TV_GRAPHICS, MEMORY_PRESET, [15]);
+      decoder.setCdgData(concatPacks(clutPack, memPreset));
+      decoder.updateFrame(0);
+      expect(pixelAt(mock.imageData, 0, 0)).toEqual([255, 255, 255, 255]);
+      expect(pixelAt(mock.imageData, 143, 95)).toEqual([255, 255, 255, 255]);
+    });
+  });
+
+  it("ignores non-TV_GRAPHICS commands", () => {
+    decoder.setCdgData(makePack(0x00, MEMORY_PRESET));
+    decoder.updateFrame(0);
+    expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 0, 255]);
+  });
+
+  it("ignores unknown TV_GRAPHICS instructions", () => {
+    decoder.setCdgData(makePack(TV_GRAPHICS, 0x99));
+    decoder.updateFrame(0);
+    expect(pixelAt(mock.imageData, 0, 0)).toEqual([0, 0, 0, 255]);
   });
 
   // ── updateFrame — sync behaviour ────────────────────────────────────────────
@@ -411,9 +470,9 @@ describe("CDGDecoder", () => {
       // more than one second (300 packs) behind currentPack (306).
       // Re-decoding from pack 0 only reaches the blue CLUT, not the red one.
       const bluePack = makeClutPack(LOAD_CLUT_LO, [[0, 0, 15]]);
-      const emptyPacks = makePack(0x00, 0x00).repeat(299);
+      const emptyPack = makePack(0x00, 0x00);
       const redPack = makeClutPack(LOAD_CLUT_LO, [[15, 0, 0]]);
-      decoder.setCdgData(bluePack + emptyPacks + redPack);
+      decoder.setCdgData(concatPacks(bluePack, repeatPack(emptyPack, 299), redPack));
 
       decoder.updateFrame(306 / 300); // advances to pack 306; palette[0] = red
       expect(pixelAt(mock.imageData, 0, 0)).toEqual([255, 0, 0, 255]);

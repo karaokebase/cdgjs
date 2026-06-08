@@ -35,6 +35,7 @@ class CDGDecoder {
   #dirtyBlocks;
   #scrollBuffer;
   #cdgData = null;
+  #availablePacks = 0;
   #borderIndex = 0x00;
   #currentPack = 0x00;
   #borderDirty = false;
@@ -58,13 +59,30 @@ class CDGDecoder {
   }
 
   /**
-   * Sets the raw CDG data buffer to be decoded.
-   * @param {String} data
+   * Resets decoder state and sets the initial CDG data buffer.
+   * May be called with a partial or empty buffer when streaming; use
+   * updateCdgBuffer() to extend it as more data arrives.
+   * @param {Uint8Array} data
    */
   setCdgData(data) {
+    this.#cdgData = data;
+    this.#availablePacks = Math.floor(
+      data.length / CDGDecoder.#CDG_ENUM.PACK_SIZE,
+    );
     this.#resetCdgState();
     this.#redrawCanvas();
+  }
+
+  /**
+   * Extends the CDG data buffer without resetting decoder state.
+   * Call this as new chunks arrive during a streaming download.
+   * @param {Uint8Array} data - Accumulated bytes received so far
+   */
+  updateCdgBuffer(data) {
     this.#cdgData = data;
+    this.#availablePacks = Math.floor(
+      data.length / CDGDecoder.#CDG_ENUM.PACK_SIZE,
+    );
   }
 
   /**
@@ -142,24 +160,22 @@ class CDGDecoder {
   }
 
   /**
-   * Decodes CDG packs up to the given position.
+   * Decodes CDG packs up to the given position, clamped to available data.
    * @param {number} playbackPosition - Pack index to decode up to (exclusive)
    */
   #decodePacks(playbackPosition) {
     const e = CDGDecoder.#CDG_ENUM;
-    for (
-      let currPack = this.#currentPack;
-      currPack < playbackPosition;
-      currPack++
-    ) {
+    // Never decode past what has been downloaded.
+    const safePosition = Math.min(playbackPosition, this.#availablePacks);
+    for (let currPack = this.#currentPack; currPack < safePosition; currPack++) {
       const startOffset = currPack * e.PACK_SIZE;
-      const currCommand = this.#cdgData.codePointAt(startOffset) & 0x3f;
-      if (currCommand == e.TV_GRAPHICS) {
-        const thisPack = this.#cdgData.slice(
+      const currCommand = this.#cdgData[startOffset] & 0x3f;
+      if (currCommand === e.TV_GRAPHICS) {
+        const thisPack = this.#cdgData.subarray(
           startOffset,
           startOffset + e.PACK_SIZE,
         );
-        const currInstruction = thisPack.codePointAt(1) & 0x3f;
+        const currInstruction = thisPack[1] & 0x3f;
         switch (currInstruction) {
           case e.MEMORY_PRESET:
             this.#procMemoryPreset(thisPack);
@@ -182,7 +198,7 @@ class CDGDecoder {
         }
       }
     }
-    this.#currentPack = playbackPosition;
+    this.#currentPack = safePosition;
   }
 
   #paletteIndexToRgbTuple(requestedIndex) {
@@ -273,7 +289,7 @@ class CDGDecoder {
   #procBorderPreset(cdgPack) {
     // The border is a DIV element — only touch it when the RGB value actually changes,
     // as style changes can be expensive in some browsers.
-    const newBorderIndex = cdgPack.codePointAt(4) & 0x3f;
+    const newBorderIndex = cdgPack[4] & 0x3f;
     if (this.#palette[newBorderIndex] != this.#palette[this.#borderIndex]) {
       this.#borderDirty = true;
     }
@@ -281,24 +297,24 @@ class CDGDecoder {
   }
 
   #procMemoryPreset(cdgPack) {
-    this.#clearVram(cdgPack.codePointAt(4) & 0x3f);
+    this.#clearVram(cdgPack[4] & 0x3f);
   }
 
   #procLoadClut(cdgPack) {
     const e = CDGDecoder.#CDG_ENUM;
     const localPalette = this.#palette;
     // If instruction is 0x1E then 8*0=0, if 0x1F then 8*1=8 for offset.
-    const palOffset = (cdgPack.codePointAt(1) & 0x01) * e.CLUT_ENTRIES;
+    const palOffset = (cdgPack[1] & 0x01) * e.CLUT_ENTRIES;
     for (let palInc = 0; palInc < e.CLUT_ENTRIES; palInc++) {
       const tempIdx = palInc + palOffset;
       let tempRgb = 0x00000000;
-      let tempEntry = (cdgPack.codePointAt(palInc * 2 + 4) & 0x3c) >> 2;
+      let tempEntry = (cdgPack[palInc * 2 + 4] & 0x3c) >> 2;
       tempRgb |= (tempEntry * 17) << 16;
       tempEntry =
-        ((cdgPack.codePointAt(palInc * 2 + 4) & 0x03) << 2) |
-        ((cdgPack.codePointAt(palInc * 2 + 5) & 0x30) >> 4);
+        ((cdgPack[palInc * 2 + 4] & 0x03) << 2) |
+        ((cdgPack[palInc * 2 + 5] & 0x30) >> 4);
       tempRgb |= (tempEntry * 17) << 8;
-      tempEntry = cdgPack.codePointAt(palInc * 2 + 5) & 0x0f;
+      tempEntry = cdgPack[palInc * 2 + 5] & 0x0f;
       tempRgb |= tempEntry * 17;
       // Only update if the color has changed; a CLUT load triggers a full screen redraw.
       if (tempRgb != localPalette[tempIdx]) {
@@ -318,30 +334,25 @@ class CDGDecoder {
     // Hacky hack to play channels 0 and 1 only... Ideally, there should be a function and user option to get/set.
     const activeChannels = 0x03;
     const subcodeChannel =
-      ((cdgPack.codePointAt(4) & 0x30) >> 2) |
-      ((cdgPack.codePointAt(5) & 0x30) >> 4);
+      ((cdgPack[4] & 0x30) >> 2) |
+      ((cdgPack[5] & 0x30) >> 4);
     if (!((activeChannels >> subcodeChannel) & 0x01)) {
       return;
     }
-    const xLocation = cdgPack.codePointAt(7) & 0x3f;
-    const yLocation = cdgPack.codePointAt(6) & 0x1f;
+    const xLocation = cdgPack[7] & 0x3f;
+    const yLocation = cdgPack[6] & 0x1f;
     // Verify we're not going to overrun the boundaries (i.e. bad data from a scratched disc).
     if (xLocation >= e.NUM_X_FONTS || yLocation >= e.NUM_Y_FONTS) {
       return;
     }
-    const xorVar = cdgPack.codePointAt(1) & 0x20;
+    const xorVar = cdgPack[1] & 0x20;
     const startPixel = yLocation * e.NUM_X_FONTS * e.FONT_HEIGHT + xLocation;
-    // NOTE: Profiling indicates codePointAt() uses ~80% of the CPU consumed for this function.
-    // Caching these values reduces that to a negligible amount.
-    const idx0 = cdgPack.codePointAt(4) & 0x0f;
-    const idx1 = cdgPack.codePointAt(5) & 0x0f;
+    // Cache idx0/idx1 to avoid repeated array lookups in the hot inner loop.
+    const idx0 = cdgPack[4] & 0x0f;
+    const idx1 = cdgPack[5] & 0x0f;
     for (let yInc = 0; yInc < e.FONT_HEIGHT; yInc++) {
       const pixPos = yInc * e.NUM_X_FONTS + startPixel;
-      const tempPxl = this.#packPixelRow(
-        cdgPack.codePointAt(yInc + 8),
-        idx0,
-        idx1,
-      );
+      const tempPxl = this.#packPixelRow(cdgPack[yInc + 8], idx0, idx1);
       if (xorVar) {
         localVram[pixPos] ^= tempPxl;
       } else {
@@ -367,10 +378,10 @@ class CDGDecoder {
   }
 
   #procDoScroll(cdgPack) {
-    const copyFlag = (cdgPack.codePointAt(1) & 0x08) >> 3;
-    const color = cdgPack.codePointAt(4) & 0x0f;
-    const hDirection = (cdgPack.codePointAt(5) & 0x30) >> 4;
-    const vDirection = (cdgPack.codePointAt(6) & 0x30) >> 4;
+    const copyFlag = (cdgPack[1] & 0x08) >> 3;
+    const color = cdgPack[4] & 0x0f;
+    const hDirection = (cdgPack[5] & 0x30) >> 4;
+    const vDirection = (cdgPack[6] & 0x30) >> 4;
     if (hDirection) {
       this.#procVramHscroll(hDirection, copyFlag, color);
     }
