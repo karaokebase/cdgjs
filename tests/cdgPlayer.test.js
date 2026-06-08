@@ -23,6 +23,26 @@ function createPlayer(id = "player", initOptions) {
   return new CDGPlayer(id, initOptions);
 }
 
+// Returns a fetch mock that resolves successfully with a CDG ArrayBuffer payload.
+function makeSuccessfulFetch(byteLength = 0) {
+  return vi.fn().mockResolvedValue({
+    ok: true,
+    arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(byteLength)),
+  });
+}
+
+// Returns a fetch mock whose arrayBuffer() resolves only when the returned
+// `resolve` function is called, letting tests observe mid-download state.
+function makeHangingFetch() {
+  let resolve;
+  const pending = new Promise((r) => { resolve = r; });
+  const mockFetch = vi.fn().mockResolvedValue({
+    ok: true,
+    arrayBuffer: vi.fn().mockReturnValue(pending),
+  });
+  return { mockFetch, resolve: (buf = new ArrayBuffer(0)) => resolve(buf) };
+}
+
 describe("CDGPlayer", () => {
   beforeEach(() => {
     document.body.innerHTML = "";
@@ -76,15 +96,23 @@ describe("CDGPlayer", () => {
       createPlayer("player", { showControls: false });
       expect(document.getElementById("player-audio").controls).toBe(false);
     });
+  });
 
-    it("enables autoplay by default", () => {
-      createPlayer();
-      expect(document.getElementById("player-audio").autoplay).toBe(true);
+  // ── autoplay ─────────────────────────────────────────────────────────────────
+
+  describe("autoplay", () => {
+    it("starts audio automatically after track loads when autoplay is enabled (default)", async () => {
+      vi.stubGlobal("fetch", makeSuccessfulFetch());
+      const player = createPlayer(); // autoplay: true by default
+      await player.loadTrack("song");
+      expect(HTMLAudioElement.prototype.play).toHaveBeenCalledOnce();
     });
 
-    it("disables autoplay when autoplay is false", () => {
-      createPlayer("player", { autoplay: false });
-      expect(document.getElementById("player-audio").autoplay).toBe(false);
+    it("does not auto-play after track loads when autoplay is false", async () => {
+      vi.stubGlobal("fetch", makeSuccessfulFetch());
+      const player = createPlayer("player", { autoplay: false });
+      await player.loadTrack("song");
+      expect(HTMLAudioElement.prototype.play).not.toHaveBeenCalled();
     });
   });
 
@@ -122,8 +150,6 @@ describe("CDGPlayer", () => {
 
     it("silently ignores unhandled non-error events", () => {
       createPlayer();
-      // Dispatch "ended" with no registered listener: #emit("ended") should reach
-      // the false branch of `else if (event === "error")` without throwing.
       expect(() =>
         document.getElementById("player-audio").dispatchEvent(new Event("ended")),
       ).not.toThrow();
@@ -195,7 +221,7 @@ describe("CDGPlayer", () => {
     });
   });
 
-  // ── loadTrack — success / failure ────────────────────────────────────────────
+  // ── loadTrack — outcomes ──────────────────────────────────────────────────────
 
   describe("loadTrack — outcomes", () => {
     it("emits error when CDG fetch fails", async () => {
@@ -208,34 +234,49 @@ describe("CDGPlayer", () => {
       );
     });
 
-    it("calls setCdgData on the decoder when fetch succeeds", async () => {
-      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-        ok: true,
-        text: vi.fn().mockResolvedValue("cdg-payload"),
-      }));
-      const player = createPlayer();
+    it("calls setCdgData on the decoder with a Uint8Array when fetch succeeds", async () => {
+      vi.stubGlobal("fetch", makeSuccessfulFetch(24));
+      const player = createPlayer("player", { autoplay: false });
       await player.loadTrack("song");
-      expect(CDGDecoder.mock.instances[0].setCdgData).toHaveBeenCalledWith("cdg-payload");
+      expect(CDGDecoder.mock.instances[0].setCdgData).toHaveBeenCalledWith(
+        new Uint8Array(24),
+      );
     });
 
     it("returns the player for chaining", async () => {
-      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-        ok: true,
-        text: vi.fn().mockResolvedValue(""),
-      }));
-      const player = createPlayer();
+      vi.stubGlobal("fetch", makeSuccessfulFetch());
+      const player = createPlayer("player", { autoplay: false });
       expect(await player.loadTrack("song")).toBe(player);
     });
   });
 
-  // ── play / pause / stop ───────────────────────────────────────────────────────
+  // ── CDG-gated play() ──────────────────────────────────────────────────────────
 
-  describe("play()", () => {
-    it("delegates to the audio element", () => {
+  describe("play() — CDG gating", () => {
+    it("delegates to the audio element immediately when no download is in progress", () => {
+      // #cdgReady starts true; play() before any loadTrack should pass through.
       createPlayer().play();
       expect(HTMLAudioElement.prototype.play).toHaveBeenCalledOnce();
     });
+
+    it("defers audio start until CDG download completes when play() is called during loading", async () => {
+      const { mockFetch, resolve } = makeHangingFetch();
+      vi.stubGlobal("fetch", mockFetch);
+      const player = createPlayer("player", { autoplay: false });
+      const trackPromise = player.loadTrack("song");
+
+      // Still downloading — play() should queue, not start audio.
+      player.play();
+      expect(HTMLAudioElement.prototype.play).not.toHaveBeenCalled();
+
+      // Download completes — deferred play executes.
+      resolve();
+      await trackPromise;
+      expect(HTMLAudioElement.prototype.play).toHaveBeenCalledOnce();
+    });
   });
+
+  // ── pause() / stop() ─────────────────────────────────────────────────────────
 
   describe("pause()", () => {
     it("delegates to the audio element", () => {
@@ -252,6 +293,60 @@ describe("CDGPlayer", () => {
       player.stop();
       expect(HTMLAudioElement.prototype.pause).toHaveBeenCalledOnce();
       expect(audio.currentTime).toBe(0);
+    });
+
+    it("cancels a pending play so audio does not start when the download finishes", async () => {
+      const { mockFetch, resolve } = makeHangingFetch();
+      vi.stubGlobal("fetch", mockFetch);
+      const player = createPlayer("player", { autoplay: false });
+      const trackPromise = player.loadTrack("song");
+
+      player.play(); // queue a play
+      player.stop(); // cancel it
+
+      resolve();
+      await trackPromise;
+      expect(HTMLAudioElement.prototype.play).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── loading indicator ─────────────────────────────────────────────────────────
+
+  describe("loading indicator", () => {
+    it("creates a cdg-loading element inside the border by default", () => {
+      createPlayer();
+      const el = document.getElementById("player-loading");
+      expect(el).not.toBeNull();
+      expect(el.className).toBe("cdg-loading");
+    });
+
+    it("does not create the loading element when showLoadingIndicator is false", () => {
+      createPlayer("player", { showLoadingIndicator: false });
+      expect(document.getElementById("player-loading")).toBeNull();
+    });
+
+    it("shows the loading element as soon as loadTrack starts and hides it on completion", async () => {
+      const { mockFetch, resolve } = makeHangingFetch();
+      vi.stubGlobal("fetch", mockFetch);
+      const player = createPlayer("player", { autoplay: false });
+      const loadingEl = document.getElementById("player-loading");
+
+      const trackPromise = player.loadTrack("song");
+      // #showLoading() is called synchronously before the first await in loadTrack.
+      expect(loadingEl.style.display).toBe("");
+
+      resolve();
+      await trackPromise;
+      expect(loadingEl.style.display).toBe("none");
+    });
+
+    it("hides the loading element on fetch error", async () => {
+      const player = createPlayer("player", { autoplay: false });
+      player.on("error", vi.fn());
+      const loadingEl = document.getElementById("player-loading");
+
+      await player.loadTrack("song"); // default mock returns 404
+      expect(loadingEl.style.display).toBe("none");
     });
   });
 
@@ -291,7 +386,6 @@ describe("CDGPlayer", () => {
       const player = createPlayer();
       const errorHandler = vi.fn();
       player.on("error", errorHandler);
-      // audio.error is null by default in jsdom — #handleAudioError should be a no-op
       document.getElementById("player-audio").dispatchEvent(new Event("error"));
       expect(errorHandler).not.toHaveBeenCalled();
     });

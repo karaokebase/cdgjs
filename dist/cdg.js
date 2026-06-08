@@ -79,9 +79,9 @@ var e = class e {
 		let n = e.#e;
 		for (let e = this.#d; e < t; e++) {
 			let t = e * n.PACK_SIZE;
-			if ((this.#l.codePointAt(t) & 63) == n.TV_GRAPHICS) {
-				let e = this.#l.slice(t, t + n.PACK_SIZE);
-				switch (e.codePointAt(1) & 63) {
+			if ((this.#l[t] & 63) === n.TV_GRAPHICS) {
+				let e = this.#l.subarray(t, t + n.PACK_SIZE);
+				switch (e[1] & 63) {
 					case n.MEMORY_PRESET:
 						this.#w(e);
 						break;
@@ -138,27 +138,27 @@ var e = class e {
 		for (; s < l;) u = this.#b(i, u, a, o[s]), s += c, u += d;
 	}
 	#C(e) {
-		let t = e.codePointAt(4) & 63;
+		let t = e[4] & 63;
 		this.#a[t] != this.#a[this.#u] && (this.#f = !0), this.#u = t;
 	}
 	#w(e) {
-		this.#y(e.codePointAt(4) & 63);
+		this.#y(e[4] & 63);
 	}
 	#T(t) {
-		let n = e.#e, r = this.#a, i = (t.codePointAt(1) & 1) * n.CLUT_ENTRIES;
+		let n = e.#e, r = this.#a, i = (t[1] & 1) * n.CLUT_ENTRIES;
 		for (let e = 0; e < n.CLUT_ENTRIES; e++) {
-			let n = e + i, a = 0, o = (t.codePointAt(e * 2 + 4) & 60) >> 2;
-			a |= o * 17 << 16, o = (t.codePointAt(e * 2 + 4) & 3) << 2 | (t.codePointAt(e * 2 + 5) & 48) >> 4, a |= o * 17 << 8, o = t.codePointAt(e * 2 + 5) & 15, a |= o * 17, a != r[n] && (r[n] = a, this.#p = !0, n == this.#u && (this.#f = !0));
+			let n = e + i, a = 0, o = (t[e * 2 + 4] & 60) >> 2;
+			a |= o * 17 << 16, o = (t[e * 2 + 4] & 3) << 2 | (t[e * 2 + 5] & 48) >> 4, a |= o * 17 << 8, o = t[e * 2 + 5] & 15, a |= o * 17, a != r[n] && (r[n] = a, this.#p = !0, n == this.#u && (this.#f = !0));
 		}
 	}
 	#E(t) {
 		let n = e.#e, r = this.#o, i = this.#s;
-		if (!(3 >> ((t.codePointAt(4) & 48) >> 2 | (t.codePointAt(5) & 48) >> 4) & 1)) return;
-		let a = t.codePointAt(7) & 63, o = t.codePointAt(6) & 31;
+		if (!(3 >> ((t[4] & 48) >> 2 | (t[5] & 48) >> 4) & 1)) return;
+		let a = t[7] & 63, o = t[6] & 31;
 		if (a >= n.NUM_X_FONTS || o >= n.NUM_Y_FONTS) return;
-		let s = t.codePointAt(1) & 32, c = o * n.NUM_X_FONTS * n.FONT_HEIGHT + a, l = t.codePointAt(4) & 15, u = t.codePointAt(5) & 15;
+		let s = t[1] & 32, c = o * n.NUM_X_FONTS * n.FONT_HEIGHT + a, l = t[4] & 15, u = t[5] & 15;
 		for (let e = 0; e < n.FONT_HEIGHT; e++) {
-			let i = e * n.NUM_X_FONTS + c, a = this.#D(t.codePointAt(e + 8), l, u);
+			let i = e * n.NUM_X_FONTS + c, a = this.#D(t[e + 8], l, u);
 			s ? r[i] ^= a : r[i] = a;
 		}
 		i[o * n.NUM_X_FONTS + a] = 1;
@@ -168,7 +168,7 @@ var e = class e {
 		return r |= (e & 16 ? n : t) << 4, r |= (e & 8 ? n : t) << 8, r |= (e & 4 ? n : t) << 12, r |= (e & 2 ? n : t) << 16, r |= (e & 1 ? n : t) << 20, r;
 	}
 	#O(e) {
-		let t = (e.codePointAt(1) & 8) >> 3, n = e.codePointAt(4) & 15, r = (e.codePointAt(5) & 48) >> 4, i = (e.codePointAt(6) & 48) >> 4;
+		let t = (e[1] & 8) >> 3, n = e[4] & 15, r = (e[5] & 48) >> 4, i = (e[6] & 48) >> 4;
 		r && this.#k(r, t, n), i && this.#M(i, t, n), this.#p = !0;
 	}
 	#k(e, t, n) {
@@ -224,53 +224,64 @@ var e = class e {
 	#i = null;
 	#a = null;
 	#o = null;
-	#s = {};
+	#s = null;
+	#c = {};
+	#l = !0;
+	#u = !1;
+	#d = !1;
 	constructor(e, t) {
-		this.#h(e, t);
+		this.#x(e, t);
 	}
 	async loadTrack(e) {
-		let n = this.#f(e), r;
-		this.#d(), this.#i ??= document.createElement("source"), this.#i.type = t.#n[n.audioFormat], this.#i.src = n.mediaPath + n.audioFilePrefix + "." + n.audioFormat, this.#r.appendChild(this.#i), this.#r.load();
+		let n = this.#v(e);
+		this.#l = !1, this.#u = !1, this.#_(), this.#i ??= document.createElement("source"), this.#i.type = t.#n[n.audioFormat], this.#i.src = n.mediaPath + n.audioFilePrefix + "." + n.audioFormat, this.#r.appendChild(this.#i), this.#r.load(), this.#p();
 		try {
 			let e = n.mediaPath + n.cdgFilePrefix + "." + n.cdgFileExtension, t = await fetch(e);
 			if (!t.ok) throw Error(`CDG file failed to load: ${t.status}`);
-			r = await t.text(), this.#o.setCdgData(r);
+			let r = await t.arrayBuffer();
+			this.#o.setCdgData(new Uint8Array(r)), this.#l = !0, this.#m(), (this.#u || this.#d) && (this.#u = !1, this.#r.play());
 		} catch (e) {
-			this.#c("error", e);
+			this.#m(), this.#f("error", e);
 		}
 		return this;
 	}
 	on(e, t) {
-		return this.#s[e] || (this.#s[e] = []), this.#s[e].push(t), this;
+		return this.#c[e] || (this.#c[e] = []), this.#c[e].push(t), this;
 	}
 	pause() {
 		this.#r.pause();
 	}
 	play() {
-		this.#r.play();
+		this.#l ? this.#r.play() : this.#u = !0;
 	}
 	stop() {
-		this.#r.pause(), this.#r.currentTime = 0;
+		this.#u = !1, this.#r.pause(), this.#r.currentTime = 0;
 	}
-	#c(e, ...t) {
-		if (this.#s[e] && this.#s[e].length > 0) for (let n of this.#s[e]) n(...t);
+	#f(e, ...t) {
+		if (this.#c[e] && this.#c[e].length > 0) for (let n of this.#c[e]) n(...t);
 		else e === "error" && console.error(...t);
 	}
-	#l() {
+	#p() {
+		this.#s && (this.#s.style.display = "");
+	}
+	#m() {
+		this.#s && (this.#s.style.display = "none");
+	}
+	#h() {
 		if (this.#r.error) {
 			let e = this.#r.error.code ? this.#r.error.code : this.#r.error;
-			this.#c("error", /* @__PURE__ */ Error("The audio control fired an error event. Could be: " + e));
+			this.#f("error", /* @__PURE__ */ Error("The audio control fired an error event. Could be: " + e));
 		}
 	}
-	#u() {
+	#g() {
 		this.#a = setInterval(() => {
 			this.#o.updateFrame(this.#r.currentTime);
 		}, t.#e);
 	}
-	#d() {
+	#_() {
 		clearInterval(this.#a);
 	}
-	#f(e) {
+	#v(e) {
 		if (!e || Array.isArray(e) || typeof e != "string" && typeof e != "object") throw Error("No track information specified, nothing to load!");
 		let n = t.#t;
 		if (typeof e == "string") return {
@@ -290,13 +301,13 @@ var e = class e {
 			cdgFileExtension: e.cdgFileExtension ?? n.cdgFileExtension
 		};
 	}
-	#p(e) {
+	#y(e) {
 		document.fullscreenElement ? document.exitFullscreen?.() : e.target.requestFullscreen();
 	}
-	#m() {
-		this.#r.paused ? this.#r.play() : this.#r.pause();
+	#b() {
+		this.#r.paused ? this.play() : this.#r.pause();
 	}
-	#h(t, n = {}) {
+	#x(t, n = {}) {
 		if (!t) throw Error("Required initialisation parameter missing.");
 		let r = document.getElementById(t), i = document.createElement("div"), a = document.createElement("canvas");
 		this.#r = document.createElement("audio"), i.id = t + "-border", i.className = "cdg-border", a.id = t + "-canvas", a.className = "cdg-canvas";
@@ -305,16 +316,17 @@ var e = class e {
 			allowFullscreen: !0,
 			autoplay: !0,
 			showControls: !0,
+			showLoadingIndicator: !0,
 			...n
 		};
-		o.allowClickToPlay && a.addEventListener("click", () => this.#m(), !0), o.allowFullscreen && a.addEventListener("dblclick", (e) => this.#p(e), !0), this.#r.id = t + "-audio", this.#r.className = "cdg-audio", i.appendChild(a), r.appendChild(i), r.appendChild(this.#r), this.#r.style.width = a.offsetWidth + "px", this.#r.controls = o.showControls, this.#r.autoplay = o.autoplay;
+		this.#d = o.autoplay, o.allowClickToPlay && a.addEventListener("click", () => this.#b(), !0), o.allowFullscreen && a.addEventListener("dblclick", (e) => this.#y(e), !0), o.showLoadingIndicator && (this.#s = document.createElement("div"), this.#s.id = t + "-loading", this.#s.className = "cdg-loading", this.#s.style.display = "none", i.appendChild(this.#s)), this.#r.id = t + "-audio", this.#r.className = "cdg-audio", this.#r.controls = o.showControls, i.appendChild(a), r.appendChild(i), r.appendChild(this.#r), this.#r.style.width = a.offsetWidth + "px";
 		let s = {
-			error: () => this.#l(),
-			play: () => this.#u(),
-			pause: () => this.#d(),
-			abort: () => this.#d(),
+			error: () => this.#h(),
+			play: () => this.#g(),
+			pause: () => this.#_(),
+			abort: () => this.#_(),
 			ended: () => {
-				this.#d(), this.#c("ended");
+				this.#_(), this.#f("ended");
 			}
 		};
 		for (let [e, t] of Object.entries(s)) this.#r.addEventListener(e, t, !0);
