@@ -284,7 +284,17 @@ class CDGPlayer {
     this.#audioPlayer.style.width = canvasEl.offsetWidth + "px";
     const audioListeners = {
       error: () => this.#handleAudioError(),
-      play: () => this.#setCDGInterval(),
+      play: () => {
+        if (this.#cdgReady) {
+          this.#setCDGInterval();
+        } else {
+          // The native audio controls started playback before the CDG file has
+          // finished downloading. Pause immediately and queue the play request
+          // so it fires automatically once the download completes.
+          this.#audioPlayer.pause();
+          this.#pendingPlay = true;
+        }
+      },
       pause: () => this.#clearCDGInterval(),
       abort: () => this.#clearCDGInterval(),
       ended: () => {

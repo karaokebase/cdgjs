@@ -322,7 +322,9 @@ var e = class e {
 		this.#d = o.autoplay, o.allowClickToPlay && a.addEventListener("click", () => this.#b(), !0), o.allowFullscreen && a.addEventListener("dblclick", (e) => this.#y(e), !0), o.showLoadingIndicator && (this.#s = document.createElement("div"), this.#s.id = t + "-loading", this.#s.className = "cdg-loading", this.#s.style.display = "none", i.appendChild(this.#s)), this.#r.id = t + "-audio", this.#r.className = "cdg-audio", this.#r.controls = o.showControls, i.appendChild(a), r.appendChild(i), r.appendChild(this.#r), this.#r.style.width = a.offsetWidth + "px";
 		let s = {
 			error: () => this.#h(),
-			play: () => this.#g(),
+			play: () => {
+				this.#l ? this.#g() : (this.#r.pause(), this.#u = !0);
+			},
 			pause: () => this.#_(),
 			abort: () => this.#_(),
 			ended: () => {

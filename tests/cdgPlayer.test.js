@@ -274,6 +274,23 @@ describe("CDGPlayer", () => {
       await trackPromise;
       expect(HTMLAudioElement.prototype.play).toHaveBeenCalledOnce();
     });
+
+    it("pauses immediately and queues play when the native controls start audio before CDG is ready", async () => {
+      const { mockFetch, resolve } = makeHangingFetch();
+      vi.stubGlobal("fetch", mockFetch);
+      const player = createPlayer("player", { autoplay: false });
+      const trackPromise = player.loadTrack("song");
+
+      // Simulate the native audio controls' play button — fires the play event
+      // directly on the element, bypassing CDGPlayer.play().
+      document.getElementById("player-audio").dispatchEvent(new Event("play"));
+      expect(HTMLAudioElement.prototype.pause).toHaveBeenCalledOnce(); // intercepted
+
+      // After CDG downloads the deferred play should execute.
+      resolve();
+      await trackPromise;
+      expect(HTMLAudioElement.prototype.play).toHaveBeenCalledOnce();
+    });
   });
 
   // ── pause() / stop() ─────────────────────────────────────────────────────────
