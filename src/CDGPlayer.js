@@ -27,20 +27,31 @@ class CDGPlayer {
   #audioSourceElement = null;
   #cdgIntervalID = null;
   #cdgDecoder = null;
+  #loadingEl = null;
   #listeners = {};
+  // True once the CDG file for the current track has fully downloaded.
+  // play() is deferred until this flag is set.
+  #cdgReady = true;
+  // Set by play() when called while a CDG download is in progress.
+  #pendingPlay = false;
+  // Stored from initOptions so it can be applied after CDG is ready.
+  #autoplay = false;
 
   constructor(containerId, initOptions) {
     this.#init(containerId, initOptions);
   }
 
   /**
-   * Loads a CDG track into the player.
+   * Loads a CDG track into the player. Audio playback is intentionally held
+   * until the CDG file has fully downloaded so that lyrics are always in sync
+   * from the first frame, with no mid-song buffering pauses.
    * @param {string|TrackOptions} trackOptions - Track filename prefix or full options object
    * @returns {Promise<CDGPlayer>}
    */
   async loadTrack(trackOptions) {
     const trackInfo = this.#parseTrackOptions(trackOptions);
-    let cdgData;
+    this.#cdgReady = false;
+    this.#pendingPlay = false;
     this.#clearCDGInterval();
     if (this.#audioSourceElement == null) {
       this.#audioSourceElement = document.createElement("source");
@@ -53,7 +64,10 @@ class CDGPlayer {
       "." +
       trackInfo.audioFormat;
     this.#audioPlayer.appendChild(this.#audioSourceElement);
+    // Begin audio buffering in parallel with the CDG download so the audio
+    // element is ready to play as soon as the CDG file arrives.
     this.#audioPlayer.load();
+    this.#showLoading();
     try {
       const cdgUrl =
         trackInfo.mediaPath +
@@ -64,9 +78,18 @@ class CDGPlayer {
       if (!response.ok) {
         throw new Error(`CDG file failed to load: ${response.status}`);
       }
-      cdgData = await response.text();
-      this.#cdgDecoder.setCdgData(cdgData);
+      // Fetch binary data directly to avoid any text-encoding mangling.
+      const buffer = await response.arrayBuffer();
+      this.#cdgDecoder.setCdgData(new Uint8Array(buffer));
+      this.#cdgReady = true;
+      this.#hideLoading();
+      // Start audio if the user already clicked play, or if autoplay is on.
+      if (this.#pendingPlay || this.#autoplay) {
+        this.#pendingPlay = false;
+        this.#audioPlayer.play();
+      }
     } catch (error) {
+      this.#hideLoading();
       this.#emit("error", error);
     }
     return this;
@@ -74,7 +97,7 @@ class CDGPlayer {
 
   /**
    * Registers an event handler on the player.
-   * @param {string} event - Event name ('error')
+   * @param {string} event - Event name ('error' | 'ended')
    * @param {Function} handler - Handler function
    * @returns {CDGPlayer}
    */
@@ -91,13 +114,22 @@ class CDGPlayer {
     this.#audioPlayer.pause();
   }
 
-  /** @returns {void} */
+  /**
+   * Starts audio playback. If the CDG file is still downloading, the play
+   * request is queued and executed automatically once the download completes.
+   * @returns {void}
+   */
   play() {
-    this.#audioPlayer.play();
+    if (this.#cdgReady) {
+      this.#audioPlayer.play();
+    } else {
+      this.#pendingPlay = true;
+    }
   }
 
   /** @returns {void} */
   stop() {
+    this.#pendingPlay = false;
     this.#audioPlayer.pause();
     this.#audioPlayer.currentTime = 0;
   }
@@ -109,6 +141,18 @@ class CDGPlayer {
       }
     } else if (event === "error") {
       console.error(...args);
+    }
+  }
+
+  #showLoading() {
+    if (this.#loadingEl) {
+      this.#loadingEl.style.display = "";
+    }
+  }
+
+  #hideLoading() {
+    if (this.#loadingEl) {
+      this.#loadingEl.style.display = "none";
     }
   }
 
@@ -184,7 +228,7 @@ class CDGPlayer {
 
   #togglePlay() {
     if (this.#audioPlayer.paused) {
-      this.#audioPlayer.play();
+      this.play();
     } else {
       this.#audioPlayer.pause();
     }
@@ -202,16 +246,18 @@ class CDGPlayer {
     borderEl.className = "cdg-border";
     canvasEl.id = containerId + "-canvas";
     canvasEl.className = "cdg-canvas";
-    let defaultConfig = {
+    const defaultConfig = {
       allowClickToPlay: true,
       allowFullscreen: true,
       autoplay: true,
       showControls: true,
+      showLoadingIndicator: true,
     };
-    let config = {
+    const config = {
       ...defaultConfig,
       ...initOptions,
     };
+    this.#autoplay = config.autoplay;
     if (config.allowClickToPlay) {
       canvasEl.addEventListener("click", () => this.#togglePlay(), true);
     }
@@ -222,17 +268,33 @@ class CDGPlayer {
         true,
       );
     }
+    if (config.showLoadingIndicator) {
+      this.#loadingEl = document.createElement("div");
+      this.#loadingEl.id = containerId + "-loading";
+      this.#loadingEl.className = "cdg-loading";
+      this.#loadingEl.style.display = "none";
+      borderEl.appendChild(this.#loadingEl);
+    }
     this.#audioPlayer.id = containerId + "-audio";
     this.#audioPlayer.className = "cdg-audio";
+    this.#audioPlayer.controls = config.showControls;
     borderEl.appendChild(canvasEl);
     containerEl.appendChild(borderEl);
     containerEl.appendChild(this.#audioPlayer);
     this.#audioPlayer.style.width = canvasEl.offsetWidth + "px";
-    this.#audioPlayer.controls = config.showControls;
-    this.#audioPlayer.autoplay = config.autoplay;
     const audioListeners = {
       error: () => this.#handleAudioError(),
-      play: () => this.#setCDGInterval(),
+      play: () => {
+        if (this.#cdgReady) {
+          this.#setCDGInterval();
+        } else {
+          // The native audio controls started playback before the CDG file has
+          // finished downloading. Pause immediately and queue the play request
+          // so it fires automatically once the download completes.
+          this.#audioPlayer.pause();
+          this.#pendingPlay = true;
+        }
+      },
       pause: () => this.#clearCDGInterval(),
       abort: () => this.#clearCDGInterval(),
       ended: () => {
