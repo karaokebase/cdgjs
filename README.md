@@ -11,8 +11,7 @@ It is now packaged as an ES module (previously an AMD module) to take advantage 
 
 ## Usage
 
-See the files in the [example](./example) directory for a working demo implementation. You will need to provide your
-own CDG file and accompanying audio file for the demo to work (the example uses 2 files named `demo.cdg` and `demo.mp3`).
+See the files in the [example](./example) directory for a working demo implementation. You will need to provide your own CDG file and accompanying audio file for the demo to work (the example uses 2 files named `demo.cdg` and `demo.mp3`).
 
 Start the dev server by running `npm run example` in the project root directory, and then open `http://localhost:5173/` in your browser.
 
@@ -30,8 +29,7 @@ And then, having imported the cdg module, create a player instance, passing the 
 const player = init("cdg", {autoplay: false, showControls: true});
 ```
 
-This initialises the player variable with an instance of a `CDGPlayer` object which can then be interacted with for
-loading and playing your CDG tracks:
+This initialises the player variable with an instance of a `CDGPlayer` object which can then be interacted with for loading and playing your CDG tracks:
 
 ```javascript
 player.loadTrack('demo');
@@ -67,8 +65,7 @@ Optional initialisation options for the main player control
 
 ### CDGPlayer.loadTrack(trackOptions)
 
-Load a new CDG track into the player. loadTrack() can be called with either a `String` or `Object` value for
-`trackOptions` as follows.
+Load a new CDG track into the player. loadTrack() can be called with either a `String` or `Object` value for `trackOptions` as follows.
 
 #### trackOptions
 
