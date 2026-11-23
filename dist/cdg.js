@@ -3,7 +3,7 @@
 *  (http://cdgmagic.sourceforge.net/html5_cdgplayer/). Visit project for full license
 *  information and documentation: https://github.com/karaokebase/cdgjs
 */
-//#region src/CDGDecoder.js
+// src/CDGDecoder.js
 var e = class e {
 	static #e = {
 		VRAM_HEIGHT: 216,
@@ -97,9 +97,7 @@ var e = class e {
 						this.#E(e);
 						break;
 					case n.SCROLL_PRESET:
-					case n.SCROLL_COPY:
-						this.#O(e);
-						break;
+					case n.SCROLL_COPY: this.#O(e);
 				}
 			}
 		}
@@ -335,12 +333,10 @@ var e = class e {
 		this.#o = new e(a, i);
 	}
 };
-//#endregion
-//#region src/cdg.js
+// src/cdg.js
 function n(e, n) {
 	return new t(e, n);
 }
-//#endregion
 export { e as CDGDecoder, n as init };
 
 //# sourceMappingURL=cdg.js.map
