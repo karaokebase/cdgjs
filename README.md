@@ -7,9 +7,13 @@ cdgjs is a JavaScript library for playing CD+G (or MP3+G) files, typically in th
 The core of the library was originally derived from 
 [CD+Graphics Magic HTML5 CD+G Player](http://cdgmagic.sourceforge.net/html5_cdgplayer/), to which full credit is given.
 
-It is now packaged as an ES module (previously an AMD module) to take advantage of modern browser module loading capabilities. Migration should be straightforward if you were previously using the AMD module - see the [example](./example) directory for updated implementation instructions.
-
 ## Usage
+
+```
+npm install @karaokebase/cdgjs
+```
+
+## Example
 
 See the files in the [example](./example) directory for a working demo implementation. You will need to provide your own CDG file and accompanying audio file for the demo to work (the example uses 2 files named `demo.cdg` and `demo.mp3`).
 
