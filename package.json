@@ -1,7 +1,7 @@
 {
   "name": "@karaokebase/cdgjs",
   "description": "A JavaScript library for playing CD+G (MP3+G) files in a web browser",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "Will Prescott",
   "license": "GPL-2.0-only",
   "homepage": "https://github.com/karaokebase/cdgjs",
