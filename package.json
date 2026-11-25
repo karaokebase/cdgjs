@@ -13,6 +13,7 @@
     "url": "https://github.com/karaokebase/cdgjs/issues"
   },
   "type": "module",
+  "main": "./dist/cdg.js",
   "scripts": {
     "build": "vite build",
     "example": "vite",
